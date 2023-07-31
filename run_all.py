@@ -51,7 +51,7 @@ if __name__ == '__main__':
 
     realtime_inference(config, camera_paths=camera_paths, compute_3d=True, 
                        display_3d=True, display_2d=True, display_scale=0.5,
-                       crop_size=600, max_queue_size=1500, verbose=True, local_mode=True)
+                       crop_size=640, max_queue_size=1500, verbose=True, local_mode=True)
     
     ## Test mac change in main branch
     ## Test mac change in test branch and delete these line in the main branch
