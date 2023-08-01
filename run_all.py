@@ -21,21 +21,24 @@ if __name__ == '__main__':
     # set_coordinates(config, obj_name='axes', offset=[0, 0, 0], frame_idx=75)
 
     # from marmopose.evaluate import evaluate
-    # evaluate(config, './labels/models/model_single_v1.1', './labels/original_labels/labels_230703_n669_baseline.slp')
+    # evaluate(config, 
+    #          model_dir='/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoPose/data/models/single_v2.3', 
+    #          label_path='/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoPose/data/single_230729_n1000_baseline.slp', 
+    #          verbose=True)
 
     # from marmopose.predict import predict
     # from marmopose.utils.plots import plot_scores, plot_visibility
     # predict(config, batch_size=4, multi_animal = False, verbose = True)
-    # # plot_scores(config)
-    # # plot_visibility(config, mode='each')
+    # plot_scores(config)
+    # plot_visibility(config, mode='count')
 
     # from marmopose.visualize_2d import generate_video_2d
     # generate_video_2d(config, filtered = False, verbose = True)
 
-    # from marmopose.triangulate import triangulate
-    # from marmopose.utils.plots import plot_triangulation_errors
+    from marmopose.triangulate import triangulate
+    from marmopose.utils.plots import plot_triangulation_errors
     # triangulate(config, filtered = False, verbose = True)
-    # # plot_triangulation_errors(config)
+    plot_triangulation_errors(config)
 
     # from marmopose.visualize_3d import generate_video_3d
     # generate_video_3d(config)

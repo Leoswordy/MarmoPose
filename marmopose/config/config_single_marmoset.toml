@@ -6,10 +6,10 @@ video_extension = 'mp4'
 cam_regex = 'cam(\d)'
 
 # Models in this folder would be used to predict the 2d bodyparts
-model_dir = 'D:\Sync\MarmoPose\data\models\single_v1.3' 
+model_dir = 'D:\Sync\MarmoPose\data\models\single_v2.3' 
 
 # All resources should be stored in this directory
-project_dir = 'D:\ccq\demos\single_30s'
+project_dir = '/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoSync/demos/single_30s'
 
 # The ordered bodyparts name, should be the same as 2D predict model
 bodyparts = ['head', 'leftear', 'rightear', 'neck', 'leftelbow', 'rightelbow', 'lefthand', 'righthand', 'spinemid', 'tailbase', 'leftknee', 'rightknee', 'leftfoot', 'rightfoot', 'tailmid', 'tailend']
