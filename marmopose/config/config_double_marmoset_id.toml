@@ -6,16 +6,16 @@ video_extension = 'mp4'
 cam_regex = 'cam(\d)'
 
 # Models in this folder would be used to predict the 2d bodyparts
-model_dir = 'D:\Sync\MarmoPose\data\models\single_v1.3' 
+model_dir = ['D:\Sync\MarmoPose\data\models\230730_204120.centroid.n=1178', 'D:\Sync\MarmoPose\data\models\id_centered_instance_v2']
 
 # All resources should be stored in this directory
-project_dir = 'D:\ccq\demos\single_30s'
+project_dir = 'D:\ccq\demos\double_8s'
 
 # The ordered bodyparts name, should be the same as 2D predict model
 bodyparts = ['head', 'leftear', 'rightear', 'neck', 'leftelbow', 'rightelbow', 'lefthand', 'righthand', 'spinemid', 'tailbase', 'leftknee', 'rightknee', 'leftfoot', 'rightfoot', 'tailmid', 'tailend']
 
 # The number of instance in the each video
-n_tracks = 1
+n_tracks = 2
 
 
 [calibration]
@@ -64,7 +64,7 @@ axes = true
 score_threshold = 0.1
 
 # Whether to use 3D optimization
-optim = false
+optim = true
 
 # Strength of enforcement of the smoothing constraints
 scale_smooth = 5

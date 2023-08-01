@@ -8,12 +8,13 @@ from marmopose.utils.common import Timer
 from marmopose.utils.io import save_pose_2d
 
 
-def predict(config: Dict[str, Any], multi_animal: bool = False, verbose: bool = True) -> None:
+def predict(config: Dict[str, Any], batch_size: int = 4, multi_animal: bool = False, verbose: bool = True) -> None:
     """
     Predict 2D poses using a SLEAP model.
 
     Args:
         config: Configuration dictionary.
+        batch_size: Batch size for prediction. Defaults to 4.
         multi_animal: Indicator whether multiple animals are in the video. Defaults to False.
         verbose: Controls whether to display additional information. Defaulats to True.
     """
@@ -35,7 +36,7 @@ def predict(config: Dict[str, Any], multi_animal: bool = False, verbose: bool = 
             labels = sleap.load_file(slp_path)
         else:
             if verbose: print(f'Predicting labels for: {video_path}')
-            labels = predict_labels(video, model_dir, multi_animal, n_tracks, slp_path, verbose)
+            labels = predict_labels(video, model_dir, batch_size, multi_animal, n_tracks, slp_path, verbose)
 
         output_dir = os.path.join(project_dir, poses_2d_dir)
         os.makedirs(output_dir, exist_ok=True)
@@ -44,13 +45,14 @@ def predict(config: Dict[str, Any], multi_animal: bool = False, verbose: bool = 
         export_labels_h5(labels, model_dir, config['bodyparts'], output_path)
 
 
-def predict_labels(video: sleap.Video, model_dir: str, multi_animal: bool, n_tracks: int, slp_path: str, verbose: bool) -> sleap.Labels:
+def predict_labels(video: sleap.Video, model_dir: str, batch_size: int, multi_animal: bool, n_tracks: int, slp_path: str, verbose: bool) -> sleap.Labels:
     """
     Predict labels for a video.
 
     Args:
         video: Video data.
         model_dir: Model directory path.
+        batch_size: Batch size for prediction.
         multi_animal: Indicator whether multiple animals are in the video.
         n_tracks: Number of tracks.
         slp_path: SLP file name.
@@ -61,19 +63,19 @@ def predict_labels(video: sleap.Video, model_dir: str, multi_animal: bool, n_tra
     """
     progress_reporting = 'none' if not verbose else 'rich'
     if multi_animal:
-        model_paths = [os.path.join(model_dir, 'centroid'), os.path.join(model_dir, 'centered_instance')]
-        predictor = sleap.load_model(model_paths, batch_size=8, progress_reporting=progress_reporting)
+        predictor = sleap.load_model(model_dir, batch_size=batch_size, peak_threshold=0.1, progress_reporting=progress_reporting,
+                                     tracker='flow', tracker_max_instances=2, tracker_window=10)
     else:
-        predictor = sleap.load_model(model_dir, batch_size=8, progress_reporting=progress_reporting)
+        predictor = sleap.load_model(model_dir, batch_size=batch_size, peak_threshold=0.1, progress_reporting=progress_reporting)
 
     timer = Timer().start()
 
     labels = predictor.predict(video)
     timer.record('Predict')
 
-    if multi_animal:
-        labels = track(labels, n_tracks)
-        timer.record('Track')
+    # if multi_animal:
+    #     labels = track(labels, n_tracks)
+    #     timer.record('Track')
 
     labels.save(slp_path, with_images=False, embed_all_labeled=False)
     timer.record('Save')
@@ -142,7 +144,7 @@ def export_labels_h5(labels: sleap.Labels, model_dir: str, bodyparts: List[str],
     all_points_scores = np.swapaxes(all_points_scores, 0, 1) #(n_tracks, n_frames, n_bodyparts, 3)
 
     metadata = {
-        'scorer': model_dir,
+        'scorer': 'ccq', ### TOBE CHANGED!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         'tracks': [f'track{i+1}' for i in range(len(all_points_scores))],
         'bodyparts': bodyparts,
         'index': np.arange(all_points_scores.shape[1])

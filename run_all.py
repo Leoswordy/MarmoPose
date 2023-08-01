@@ -25,9 +25,9 @@ if __name__ == '__main__':
 
     # from marmopose.predict import predict
     # from marmopose.utils.plots import plot_scores, plot_visibility
-    # predict(config, multi_animal = False, verbose = True)
-    # plot_scores(config)
-    # plot_visibility(config, mode='each')
+    # predict(config, batch_size=4, multi_animal = False, verbose = True)
+    # # plot_scores(config)
+    # # plot_visibility(config, mode='each')
 
     # from marmopose.visualize_2d import generate_video_2d
     # generate_video_2d(config, filtered = False, verbose = True)
@@ -35,25 +35,25 @@ if __name__ == '__main__':
     # from marmopose.triangulate import triangulate
     # from marmopose.utils.plots import plot_triangulation_errors
     # triangulate(config, filtered = False, verbose = True)
-    # plot_triangulation_errors(config)
+    # # plot_triangulation_errors(config)
 
     # from marmopose.visualize_3d import generate_video_3d
     # generate_video_3d(config)
 
+    # from marmopose.visualize_combined import generate_video_combined
+    # generate_video_combined(config)
 
-    from marmopose.realtime.main import realtime_inference
-    camera_paths = [
-        'rtsp://admin:abc12345@192.168.1.239:554//Streaming/Channels/101', 
-        'rtsp://admin:abc12345@192.168.1.247:554//Streaming/Channels/101', 
-        'rtsp://admin:abc12345@192.168.1.244:554//Streaming/Channels/101', 
-        'rtsp://admin:abc12345@192.168.1.246:554//Streaming/Channels/101'
-    ]
 
-    realtime_inference(config, camera_paths=camera_paths, compute_3d=True, 
-                       display_3d=True, display_2d=True, display_scale=0.5,
-                       crop_size=640, max_queue_size=1500, verbose=True, local_mode=True)
-    
-    ## Test mac change in main branch
-    ## Test mac change in test branch and delete these line in the main branch
+    # from marmopose.realtime.main import realtime_inference
+    # camera_paths = [
+    #     'rtsp://admin:abc12345@192.168.1.240:554//Streaming/Channels/101', 
+    #     'rtsp://admin:abc12345@192.168.1.242:554//Streaming/Channels/101', 
+    #     'rtsp://admin:abc12345@192.168.1.244:554//Streaming/Channels/101', 
+    #     'rtsp://admin:abc12345@192.168.1.246:554//Streaming/Channels/101'
+    # ]
+
+    # realtime_inference(config, camera_paths=camera_paths, compute_3d=True, 
+    #                    display_3d=True, display_2d=True, display_scale=0.5,
+    #                    crop_size=640, max_queue_size=1500, verbose=True, local_mode=True)
 
 
