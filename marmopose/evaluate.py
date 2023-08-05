@@ -27,7 +27,7 @@ def plot_2d_distance(bodyparts: List[str], metrics: Dict[str, Any]) -> None:
     plt.figure(figsize=(15, 8))
     sns.boxplot(x='BodyParts', y='Error(px)', data=df_melted, fliersize=0.5, showfliers=False)
     sns.stripplot(x='BodyParts', y='Error(px)', data=df_melted, color='grey', size=1, jitter=True)
-    plt.title(f'Distance between 2D predictions and ground truth')
+    plt.title(f'Distance between 2D predictions and ground truth (Frames={df_errors.shape[1]})')
     plt.xticks(rotation=45) 
     plt.yticks(np.arange(0, df_melted['Error(px)'].max()+1, step=5))
     plt.tight_layout()

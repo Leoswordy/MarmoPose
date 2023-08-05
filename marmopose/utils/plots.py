@@ -237,8 +237,8 @@ def plot_triangulation_errors(config: Dict[str, Any]) -> None:
 
     plt.figure(figsize=(15, 8))
     sns.boxplot(x='BodyParts', y='Error(px)', data=df_melted, fliersize=2, showfliers=False)
-    sns.stripplot(x='BodyParts', y='Error(px)', data=df_melted, color='grey', size=1, jitter=True)
-    plt.title(f'Reprojection Errors for Each Body Part with More than 1 Visible Camera (Frames=30000)')
+    sns.stripplot(x='BodyParts', y='Error(px)', data=df_melted, color='grey', size=0.2, jitter=True)
+    plt.title(f'Reprojection Errors for Each Body Part (Frames={errors.shape[1]})')
     plt.xticks(rotation=45)
     y_ticks = np.arange(0, df_melted['Error(px)'].max()+1, step=5)
     plt.yticks(y_ticks)

@@ -22,8 +22,8 @@ if __name__ == '__main__':
 
     # from marmopose.evaluate import evaluate
     # evaluate(config, 
-    #          model_dir='/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoPose/data/models/single_v2.3', 
-    #          label_path='/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoPose/data/single_230729_n1000_baseline.slp', 
+    #          model_dir='/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoSync/data/models/single_v2.3', 
+    #          label_path='/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoSync/data/single_230729_n1000_baseline.slp', 
     #          verbose=True)
 
     # from marmopose.predict import predict
