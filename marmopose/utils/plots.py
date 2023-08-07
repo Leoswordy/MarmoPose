@@ -143,8 +143,9 @@ def plot_visibility(config: Dict[str, Any], track_idx: int = 0, mode: str = 'eac
 
         plt.figure(figsize=(15,8))
         sns.barplot(x='BodyParts', y='VisibleRatio', hue='Camera', data=df_melted, palette='viridis')
-        plt.title(f'Visible Ratio for Each Body Part in Each Camera (Frames={data.shape[1]})')
-        plt.ylabel('Visible Ratio')
+        plt.legend(loc='upper left', title='Camera')
+        plt.title(f'Visible Ratio for Each Body Part in Every Camera (Frames={data.shape[1]})')
+        plt.ylabel('Visible Ratio across Frames')
         plt.xticks(rotation=45)
         plt.tight_layout()
         plt.show()
@@ -159,16 +160,17 @@ def plot_visibility(config: Dict[str, Any], track_idx: int = 0, mode: str = 'eac
 
         df = pd.DataFrame(ratios.T, columns=[f'{i}' for i in range(data.shape[0]+1)])
         df['BodyParts'] = bodyparts
-        df_melted = df.melt(id_vars='BodyParts', var_name='Visible Camera Number', value_name='Ratio')
+        df_melted = df.melt(id_vars='BodyParts', var_name='Number of Visible Camera', value_name='Ratio')
 
         blue_colors = ["#4287f5", "#3062d7", "#1f3fb9"]
         red_colors = ["#FF9999", "#FF6666"]
         sns.set_palette(red_colors + blue_colors)
 
         plt.figure(figsize=(15,8))
-        sns.barplot(x='BodyParts', y='Ratio', hue='Visible Camera Number', data=df_melted)
-        plt.title(f'Ratio of Visible Camera Number for Each Body Part (Frames={data.shape[1]})')
-        plt.ylabel('Ratio')
+        sns.barplot(x='BodyParts', y='Ratio', hue='Number of Visible Camera', data=df_melted)
+        plt.legend(loc='upper left', title='Number of Visible Camera')
+        plt.title(f'Ratio of the Number of Visible Camera for Each Body Part (Frames={data.shape[1]})')
+        plt.ylabel('Ratio across Frames')
         plt.xticks(rotation=45) 
         plt.tight_layout() 
         plt.show()
@@ -234,9 +236,9 @@ def plot_triangulation_errors(config: Dict[str, Any]) -> None:
     df_melted = df_melted[df_melted['Error(px)'] <= 100]
 
     plt.figure(figsize=(15, 8))
-    sns.boxplot(x='BodyParts', y='Error(px)', data=df_melted, fliersize=0.5, showfliers=False)
-    sns.stripplot(x='BodyParts', y='Error(px)', data=df_melted, color='grey', size=1, jitter=True)
-    plt.title(f'Reprojection Errors for Each Body Part with More than 1 Visible Cameras (Frames={errors.shape[1]})')
+    sns.boxplot(x='BodyParts', y='Error(px)', data=df_melted, fliersize=2, showfliers=False)
+    sns.stripplot(x='BodyParts', y='Error(px)', data=df_melted, color='grey', size=0.2, jitter=True)
+    plt.title(f'Reprojection Errors for Each Body Part (Frames={errors.shape[1]})')
     plt.xticks(rotation=45)
     y_ticks = np.arange(0, df_melted['Error(px)'].max()+1, step=5)
     plt.yticks(y_ticks)

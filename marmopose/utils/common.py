@@ -165,6 +165,8 @@ class VideoStream(Thread):
                     return
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 self.queue.put(frame)
+            # It is important to sleep here, otherwise the thread will consume too much CPU.
+            time.sleep(self.grab_interval)
 
     def read(self) -> np.ndarray:
         """

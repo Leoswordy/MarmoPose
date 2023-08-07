@@ -21,13 +21,13 @@ def plot_2d_distance(bodyparts: List[str], metrics: Dict[str, Any]) -> None:
 
     df_errors = pd.DataFrame(dist, columns=bodyparts)
     df_melted = (df_errors.melt(var_name='BodyParts', value_name='Error(px)')
-                 .dropna().query('`Error(px)` <= 70'))
+                 .dropna().query('`Error(px)` <= 40'))
 
 
     plt.figure(figsize=(15, 8))
-    sns.boxplot(x='BodyParts', y='Error(px)', data=df_melted)
+    sns.boxplot(x='BodyParts', y='Error(px)', data=df_melted, fliersize=0.5, showfliers=False)
     sns.stripplot(x='BodyParts', y='Error(px)', data=df_melted, color='grey', size=1, jitter=True)
-    plt.title(f'Prediction distance')
+    plt.title(f'Distance between 2D predictions and ground truth (Frames={df_errors.shape[1]})')
     plt.xticks(rotation=45) 
     plt.yticks(np.arange(0, df_melted['Error(px)'].max()+1, step=5))
     plt.tight_layout()
@@ -44,7 +44,7 @@ def evaluate(config: Dict[str, Any], model_dir: str, label_path: str, verbose: b
         label_path: Path to labels.
         verbose: Enable verbose mode, defaults to True.
     """
-    output_path = f'./labels/predictions/{os.path.basename(model_dir)}_{os.path.basename(label_path)}'
+    output_path = f'/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoPose/data/predictions/{os.path.basename(model_dir)}_{os.path.basename(label_path)}'
     labels_gt = sleap.load_file(label_path)
     if os.path.exists(output_path):
         if verbose: print(f'Loading labels from: {output_path}')
@@ -52,7 +52,7 @@ def evaluate(config: Dict[str, Any], model_dir: str, label_path: str, verbose: b
     else:
         if verbose: print(f'Evaluating {label_path} using {model_dir}')
         progress_reporting = 'none' if not verbose else 'rich'
-        predictor = sleap.load_model(model_dir, batch_size=8, progress_reporting=progress_reporting)
+        predictor = sleap.load_model(model_dir, batch_size=4, progress_reporting=progress_reporting)
         labels_pr = predictor.predict(labels_gt)
         labels_pr.save(output_path, with_images=False, embed_all_labeled=False)
 
