@@ -46,7 +46,6 @@ if __name__ == '__main__':
     # from marmopose.visualize_combined import generate_video_combined
     # generate_video_combined(config)
 
-
     # from marmopose.realtime.main import realtime_inference
     # camera_paths = [
     #     'rtsp://admin:abc12345@192.168.1.240:554//Streaming/Channels/101', 
