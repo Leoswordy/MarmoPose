@@ -789,6 +789,9 @@ class CameraGroup:
         opt2 = optimize.least_squares(self._error_fun_triangulation,
                                       x0=x0, 
                                       jac_sparsity=jac,
+                                      bounds=(-np.inf, np.inf), # To be changed
+                                      method='trf', # To be changed
+                                      x_scale='jac', # To be changed
                                       loss='linear',
                                       ftol=1e-3,
                                       verbose=2*verbose,
