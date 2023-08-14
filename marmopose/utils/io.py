@@ -198,7 +198,7 @@ def load_coordinates(coordinates_filepath: str, key: str) -> Any:
     return data_dict[key]
 
 
-def load_bodypart_constraints(config: Dict[str, Any], bodyparts: List[str], key: str = 'constraints') -> List[List[int]]:
+def load_bodypart_constraints(config: Dict[str, Any], bodyparts: List[str], key: str = 'constraints') -> np.ndarray(List[List[int]]):
     """
     Load constraints for bodypart indices from the configuration.
 
@@ -208,7 +208,7 @@ def load_bodypart_constraints(config: Dict[str, Any], bodyparts: List[str], key:
         key: The key in the configuration dictionary for constraints. Defaults to 'constraints'.
 
     Returns:
-         List of constraints represented as pairs of bodypart indices.
+        List of constraints represented as pairs of bodypart indices.
 
     Raises:
         AssertionError: If a bodypart from constraints is not found in the list of bodyparts.
@@ -222,4 +222,4 @@ def load_bodypart_constraints(config: Dict[str, Any], bodyparts: List[str], key:
         assert bodypart_b in bodypart_indices, f'Bodypart {bodypart_b} from constraints not found in list of bodyparts'
         constraints.append([bodypart_indices[bodypart_a], bodypart_indices[bodypart_b]])
 
-    return constraints
+    return np.array(constraints)

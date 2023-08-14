@@ -121,7 +121,7 @@ def triangulate_with_optimization(config: Dict[str, Any],
     if verbose: print('Optimizing...')
     points_3d = camera_group.optim_points(points_2d, 
                                     points_3d_init,
-                                    scores=scores_2d,
+                                    scores_2d=scores_2d,
                                     constraints=constraints,
                                     constraints_weak=constraints_weak,
                                     scale_smooth=config['triangulation']['scale_smooth'],
@@ -130,6 +130,17 @@ def triangulate_with_optimization(config: Dict[str, Any],
                                     reproj_error_threshold=config['triangulation']['reproj_error_threshold'],
                                     n_deriv_smooth=config['triangulation']['n_deriv_smooth'],
                                     verbose=verbose)
+    # points_3d = camera_group.optimize(points_2d=points_2d, 
+    #                                 points_3d=points_3d_init,
+    #                                 scores_2d=scores_2d,
+    #                                 constraints=constraints,
+    #                                 constraints_weak=constraints_weak,
+    #                                 scale_smooth=config['triangulation']['scale_smooth'],
+    #                                 scale_length=config['triangulation']['scale_length'],
+    #                                 scale_length_weak=config['triangulation']['scale_length_weak'],
+    #                                 reprojection_error_threshold=config['triangulation']['reproj_error_threshold'],
+    #                                 n_deriv_smooth=config['triangulation']['n_deriv_smooth'],
+    #                                 verbose=verbose)
     
     points_3d_flat = points_3d.reshape(-1, 3)
 

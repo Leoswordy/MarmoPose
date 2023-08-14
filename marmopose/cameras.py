@@ -789,9 +789,6 @@ class CameraGroup:
         opt2 = optimize.least_squares(self._error_fun_triangulation,
                                       x0=x0, 
                                       jac_sparsity=jac,
-                                      bounds=(-np.inf, np.inf), # To be changed
-                                      method='trf', # To be changed
-                                      x_scale='jac', # To be changed
                                       loss='linear',
                                       ftol=1e-3,
                                       verbose=2*verbose,
@@ -849,86 +846,110 @@ class CameraGroup:
         return errors
     
 
-    def optim_points(self, 
-                     points_2d: np.ndarray, 
-                     points_3d: np.ndarray,
-                     scores_2d: np.ndarray = None, 
-                     constraints: List[Tuple[int, int]] = [], 
-                     constraints_weak: List[Tuple[int, int]] = [],
-                     scale_smooth: float = 4,
-                     scale_length: float = 2, 
-                     scale_length_weak: float = 0.5,
-                     reproj_error_threshold: float = 15, 
-                     reproj_loss: str = 'soft_l1',
-                     n_deriv_smooth: int = 1, 
-                     verbose: bool = False) -> np.ndarray:
+    def optimize(self, 
+                 points_3d: np.ndarray,
+                 points_2d: np.ndarray, 
+                 scores_2d: np.ndarray = None, 
+                 reprojection_error_threshold: float = 10, 
+                 n_deriv_smooth: int = 1, 
+                 scale_smooth: float = 5,
+                 scale_length: float = 4, 
+                 scale_length_weak: float = 1,
+                 constraints: List[Tuple[int, int]] = [], 
+                 constraints_weak: List[Tuple[int, int]] = [],
+                 verbose: bool = False) -> np.ndarray:
         """
-        Take in an array of 2D points of shape CxNxJx2, an array of 3D points of shape NxJx3,
-        and an array of constraints of shape Kx2, where
-            C: number of cameras
-            N: number of frames
-            J: number of joints
-            K: number of constraints
-
-        This function creates an optimized array of 3D points of shape NxJx3.
+        Optimize the 3D points by minimizing the reprojection error, smoothness error, limb length error.
 
         Args:
-            points_2d: 2D points with shape (C, N, J, 2).
-            points_3d: 3D points with shape (N, J, 3).
-            scores_2d: Scores for the points.
-            constraints: List of pairs of indices, each representing a rigid link between two points.
-            constraints_weak: List of pairs of indices, each representing a weakly rigid link between two points.
+            points_3d: 3D points with shape (n_frames, n_bodyparts, 3).
+            points_2d: 2D points with shape (n_cams, n_frames, n_bodyparts, 2).
+            scores_2d: Scores for the 2D points with shape (n_cams, n_frames, n_bodyparts).
+            reprojection_error_threshold: Threshold of 'soft_l1' loss for the reprojection error.
+            n_deriv_smooth: Order of the derivative used for the smoothness constraint.
             scale_smooth: Scale for the smoothness term in the error function.
             scale_length: Scale for the length term in the error function for strong constraints.
             scale_length_weak: Scale for the length term in the error function for weak constraints.
-            reproj_error_threshold: Threshold for the reprojection error.
-            reproj_loss: Type of loss function to use for the reprojection error.
-            n_deriv_smooth: Order of the derivative used for the smoothness constraint.
-            verbose: Flag for verbose output.
+            constraints: List of pairs of indices, each representing a rigid link between two body parts.
+            constraints_weak: List of pairs of indices, each representing a weakly rigid link between two body parts.
+            verbose: If True, the function will print detailed information.
 
         Returns:
-            Optimized 3D points with shape (N, J, 3).
+            Optimized 3D points with shape (n_frames, n_bodyparts, 3).
 
         Example constraints:
             constraints = [[0, 1], [1, 2], [2, 3]]
-            (meaning that lengths of segments 0->1, 1->2, 2->3 are all constant)
+            (meaning that lengths of joints 0->1, 1->2, 2->3 are all constant)
         """
-        constraints = np.array(constraints)
-        constraints_weak = np.array(constraints_weak)
-
         points_3d_interp = np.apply_along_axis(interpolate_data, 0, points_3d)
-        initial_guess = points_3d_interp.ravel() # points_3d need to be optimized
+        initial_params = points_3d_interp.ravel()
 
-        result = optimize.least_squares(self.combined_residual, initial_guess, verbose=2*verbose, 
-                                        args=(points_2d, scores_2d))
+        result = optimize.least_squares(fun=self.compute_residuals, 
+                                        x0=initial_params, 
+                                        # bounds=(-np.inf, np.inf), # To be changed
+                                        # method='trf', # To be changed
+                                        # loss='linear',
+                                        # jac_sparsity=self.get_jac_sparsity,
+                                        verbose=2*verbose, 
+                                        args=(points_2d, 
+                                              scores_2d,
+                                              reprojection_error_threshold, 
+                                              n_deriv_smooth,
+                                              scale_smooth, 
+                                              scale_length,
+                                              scale_length_weak,
+                                              constraints,
+                                              constraints_weak))
+        points_3d_optimized = result.x.reshape(points_3d.shape)
+        return points_3d_optimized
 
 
-    def combined_residual(self, points_3d_flat, points_2d, scores_2d):
+    @jit(forceobj=True, parallel=True)
+    def compute_residuals(self, points_3d_flat, *args):
+        points_2d, scores_2d, reprojection_error_threshold, n_deriv_smooth, scale_smooth, \
+            scale_length, scale_length_weak, constraints, constraints_weak = args
+        
         n_cams, n_frames, n_joints, _ = points_2d.shape
         points_3d = points_3d_flat.reshape((n_frames, n_joints, 3))
 
         residuals = []
-        residuals.extend(self.reprojection_residuals(points_3d, points_2d, scores_2d, n_cams))
-        # residuals.extend(scale_smooth * temporal_smoothness_residuals(points_3d_flat))
-        # residuals.extend(scale_length * spatial_constraints_residuals(points_3d_flat, constraints))
+        residuals.extend(self.reprojection_residual(points_3d, points_2d, scores_2d, reprojection_error_threshold))
+        residuals.extend(self.smoothness_residual(points_3d, scale_smooth, n_deriv_smooth))
+        residuals.extend(self.limb_length_residual(points_3d, constraints, constraints_weak, scale_length, scale_length_weak))
         return np.array(residuals)
 
-    def reprojection_resisuals(self, points_3d, points_2d, scores_2d, n_cams):
+
+    def reprojection_residual(self, points_3d, points_2d, scores_2d, reprojection_error_threshold):
+        n_cams = points_2d.shape[0]
         points_3d_flat = points_3d.reshape(-1, 3)
         points_2d_flat = points_2d.reshape((n_cams, -1, 2))
-        errors = self.reprojection_error(points_3d_flat, points_2d_flat)
-
         scores_flat = scores_2d.reshape((n_cams, -1))
+
+        errors = self.reprojection_error(points_3d_flat, points_2d_flat)
         errors = errors * scores_flat[:, :, None]
         
-        errors_reproj = errors[~np.isnan(points_2d_flat)]
+        errors_reproj = errors[~np.isnan(errors)]
 
-        rp = reproj_error_threshold
-        errors_reproj = np.abs(errors_reproj)
-        if reproj_loss == 'huber':
-            bad = errors_reproj > rp
-            errors_reproj[bad] = rp*(2*np.sqrt(errors_reproj[bad]/rp) - 1)
-        elif reproj_loss == 'linear':
-            pass
-        elif reproj_loss == 'soft_l1':
-            errors_reproj = rp*2*(np.sqrt(1+errors_reproj/rp)-1)
+        errors_reproj = reprojection_error_threshold*2*(np.sqrt(1+errors_reproj/reprojection_error_threshold)-1)
+
+        return errors_reproj
+    
+
+    def smoothness_residual(self, points_3d, scale_smooth, n_deriv_smooth):
+        errors_smooth = np.diff(points_3d, n=n_deriv_smooth, axis=0).ravel() * scale_smooth
+
+        return errors_smooth
+    
+
+    def limb_length_residual(self, points_3d, constraints, constraints_weak, scale_length, scale_length_weak):
+        n_frames = points_3d.shape[0]
+        joint_lengths = np.array([30, 30, 40, 40, 80, 80, 140, 140, 70, 70, 70, 70, 70, 70, 80, 80], dtype='float64')
+    
+        errors_lengths = np.empty((len(joint_lengths), n_frames), dtype='float64')
+        for cix, (a, b) in enumerate(constraints):
+            lengths = np.linalg.norm(points_3d[:, a] - points_3d[:, b], axis=1)
+            expected = joint_lengths[cix]
+            errors_lengths[cix] = 100*(lengths - expected)/expected
+        errors_lengths = errors_lengths.ravel() * scale_length
+
+        return errors_lengths
