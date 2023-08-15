@@ -222,4 +222,4 @@ def load_bodypart_constraints(config: Dict[str, Any], bodyparts: List[str], key:
         assert bodypart_b in bodypart_indices, f'Bodypart {bodypart_b} from constraints not found in list of bodyparts'
         constraints.append([bodypart_indices[bodypart_a], bodypart_indices[bodypart_b]])
 
-    return np.array(constraints)
+    return constraints

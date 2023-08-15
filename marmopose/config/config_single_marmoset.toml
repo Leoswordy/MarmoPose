@@ -9,7 +9,7 @@ cam_regex = 'cam(\d)'
 model_dir = 'D:\Sync\MarmoPose\data\models\single_v2.3' 
 
 # All resources should be stored in this directory
-project_dir = '/Users/leosword/Desktop/demos/single_30s'
+project_dir = 'C:\Users\Leosword\Desktop\demos\single_5s'
 
 # The ordered bodyparts name, should be the same as 2D predict model
 bodyparts = ['head', 'leftear', 'rightear', 'neck', 'leftelbow', 'rightelbow', 'lefthand', 'righthand', 'spinemid', 'tailbase', 'leftknee', 'rightknee', 'leftfoot', 'rightfoot', 'tailmid', 'tailend']
@@ -85,19 +85,18 @@ constraints = [
    ['leftear', 'neck'],
    ['neck', 'spinemid'],
    ['spinemid', 'tailbase'],
-   ['tailbase', 'tailmid'], 
-   ['tailmid', 'tailend'],
    ['neck', 'rightelbow'], 
    ['rightelbow', 'righthand'],
    ['neck', 'leftelbow'], 
    ['leftelbow', 'lefthand'],
-   
    ['tailbase', 'rightknee'],
    ['tailbase', 'leftknee'],
-   ['rightknee', 'rightfoot'],
-   ['leftknee', 'leftfoot']
 ]
 
 # Bodyparts pairs require weak constraints
-constraints_weak = []
-
+constraints_weak = [
+   ['tailbase', 'tailmid'], 
+   ['tailmid', 'tailend'],
+   ['rightknee', 'rightfoot'],
+   ['leftknee', 'leftfoot']
+]

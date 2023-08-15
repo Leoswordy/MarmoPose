@@ -40,7 +40,7 @@ if __name__ == '__main__':
 
     from marmopose.triangulate import triangulate
     from marmopose.utils.plots import plot_triangulation_errors
-    triangulate(config, filtered = True, verbose = True)
+    triangulate(config, filtered = False, verbose = True)
     # plot_triangulation_errors(config)
 
     from marmopose.visualize_3d import generate_video_3d

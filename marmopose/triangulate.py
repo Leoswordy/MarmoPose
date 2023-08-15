@@ -85,6 +85,69 @@ def transform_coordinates(points_3d: np.ndarray, rotation_matrix: np.ndarray, ce
     return points_3d_adj
 
 
+def triangulate(config: Dict[str, Any], filtered: bool = False, verbose: bool = False) -> None:
+    """
+    Generate 3d coordinates for each track based on 2d coordinates and camera parameters.
+
+    Args:
+        config: Configuration dictionary.
+        filtered: If True, load pose paths that have been filtered.
+        verbose: If True, the function will display detailed messages about its progress.
+    
+    Returns:
+        The result is written to a CSV file.
+    """
+    project_dir = config['project_dir']
+    poses_2d_dir = config['directory']['poses_2d']
+    poses_2d_filtered_dir = config['directory']['poses_2d_filtered']
+
+    poses_dir = os.path.join(project_dir, poses_2d_filtered_dir) if filtered else os.path.join(project_dir, poses_2d_dir)
+    pose_file_paths = sorted(glob(os.path.join(poses_dir, '*.h5')))
+
+    all_cam_points_scores, metadata = load_all_poses_2d(pose_file_paths)
+
+    camera_names = [get_cam_name(path, config['cam_regex']) for path in pose_file_paths]
+    camera_group = get_camera_group(config, camera_names)
+
+    all_points = all_cam_points_scores[..., :2] # (n_cams, n_tracks, n_frames, n_bodyparts, 2)
+    all_scores = all_cam_points_scores[..., 2] # (n_cams, n_tracks, n_frames, n_bodyparts)
+
+    # Mark points below score threshold as NaN
+    # invalid = all_scores < config['triangulation']['score_threshold']
+    # all_points[invalid] = np.nan
+
+    _, n_tracks, _, _, _ = all_points.shape
+    bodyparts = metadata['bodyparts']
+
+    axes_3d, rotation_matrix, center = calculate_3d_axes(config, camera_group)
+   
+    for track_idx in range(n_tracks):
+        track_name = metadata["tracks"][track_idx]
+        print(f'*************** {track_name} ***************')
+        
+        # if config['triangulation']['optim']:
+        #     points_3d, scores_3d, errors, valid_cams = triangulate_with_optimization(config, bodyparts, all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
+        # else:
+        #     points_3d, scores_3d, errors, valid_cams = triangulate_without_optimization(all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
+
+        points_3d, scores_3d, errors, valid_cams = triangulate_without_optimization(all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
+        if config['triangulation']['optim']:
+            points_3d = camera_group.optimize(config, 
+                                              points_3d=points_3d,
+                                              points_2d=all_points[:, track_idx], 
+                                              scores_2d=all_scores[:, track_idx],
+                                              start_frame=25, # TODO: change it to a parameter
+                                              verbose=verbose)
+        
+        points_3d = transform_coordinates(points_3d, rotation_matrix, center)
+
+        output_dir = os.path.join(config['project_dir'], config['directory']['poses_3d'])
+        os.makedirs(output_dir, exist_ok=True)
+        output_filepath = os.path.join(output_dir, f'{track_name}.csv')
+        save_pose_3d(bodyparts, points_3d, errors, valid_cams, scores_3d, rotation_matrix, axes_3d, output_filepath)
+
+
+# ====================== Below are old functions to be removed in the future version ========================
 def triangulate_with_optimization(config: Dict[str, Any], 
                                   bodyparts: List[str], 
                                   points_2d: np.ndarray, 
@@ -133,7 +196,7 @@ def triangulate_with_optimization(config: Dict[str, Any],
     points_3d = camera_group.optimize(points_3d=points_3d_init,
                                       points_2d=points_2d, 
                                       scores_2d=scores_2d,
-                                      reprojection_error_threshold=config['triangulation']['reproj_error_threshold'],
+                                      start_frame=250, # TODO: change it to a parameter
                                       n_deriv_smooth=config['triangulation']['n_deriv_smooth'],
                                       scale_smooth=config['triangulation']['scale_smooth'],
                                       scale_length=config['triangulation']['scale_length'],
@@ -196,58 +259,5 @@ def triangulate_without_optimization(points_2d: np.ndarray,
     valid_cams[valid_cams < 2] = np.nan
 
     return points_3d, scores_3d, errors, valid_cams
-
-
-def triangulate(config: Dict[str, Any], filtered: bool = False, verbose: bool = False) -> None:
-    """
-    Generate 3d coordinates for each track based on 2d coordinates and camera parameters.
-
-    Args:
-        config: Configuration dictionary.
-        filtered: If True, load pose paths that have been filtered.
-        verbose: If True, the function will display detailed messages about its progress.
-    
-    Returns:
-        The result is written to a CSV file.
-    """
-    project_dir = config['project_dir']
-    poses_2d_dir = config['directory']['poses_2d']
-    poses_2d_filtered_dir = config['directory']['poses_2d_filtered']
-
-    poses_dir = os.path.join(project_dir, poses_2d_filtered_dir) if filtered else os.path.join(project_dir, poses_2d_dir)
-    pose_file_paths = sorted(glob(os.path.join(poses_dir, '*.h5')))
-
-    all_cam_points_scores, metadata = load_all_poses_2d(pose_file_paths)
-
-    camera_names = [get_cam_name(path, config['cam_regex']) for path in pose_file_paths]
-    camera_group = get_camera_group(config, camera_names)
-
-    all_points = all_cam_points_scores[..., :2] # (n_cams, n_tracks, n_frames, n_bodyparts, 2)
-    all_scores = all_cam_points_scores[..., 2] # (n_cams, n_tracks, n_frames, n_bodyparts)
-
-    # Mark points below score threshold as NaN
-    # invalid = all_scores < config['triangulation']['score_threshold']
-    # all_points[invalid] = np.nan
-
-    _, n_tracks, _, _, _ = all_points.shape
-    bodyparts = metadata['bodyparts']
-
-    axes_3d, rotation_matrix, center = calculate_3d_axes(config, camera_group)
-   
-    for track_idx in range(n_tracks):
-        track_name = metadata["tracks"][track_idx]
-        print(f'*************** {track_name} ***************')
-        
-        if config['triangulation']['optim']:
-            points_3d, scores_3d, errors, valid_cams = triangulate_with_optimization(config, bodyparts, all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
-        else:
-            points_3d, scores_3d, errors, valid_cams = triangulate_without_optimization(all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
-
-        points_3d = transform_coordinates(points_3d, rotation_matrix, center)
-
-        output_dir = os.path.join(config['project_dir'], config['directory']['poses_3d'])
-        os.makedirs(output_dir, exist_ok=True)
-        output_filepath = os.path.join(output_dir, f'{track_name}.csv')
-        save_pose_3d(bodyparts, points_3d, errors, valid_cams, scores_3d, rotation_matrix, axes_3d, output_filepath)
 
 
