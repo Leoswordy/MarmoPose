@@ -3,10 +3,11 @@ import toml
 import numpy as np
 from numba import jit
 from tqdm import trange
-from scipy import signal, optimize
+from scipy import optimize
 from scipy.sparse import dok_matrix
 
 from typing import List, Tuple, Dict, Optional, Any
+from marmopose.filter import interpolate_data, medfilt_data
 
 
 @jit(nopython=True, parallel=True)
@@ -50,40 +51,6 @@ def make_M(rvec: np.ndarray, tvec: np.ndarray) -> np.ndarray:
     M[:3, :3] = rotmat
     M[:3, 3] = tvec.flatten()
     return M
-
-
-def interpolate_data(values: np.ndarray) -> np.ndarray:
-    """
-    Interpolates data to fill NaN values.
-
-    Args:
-        values: The data to be interpolated.
-
-    Returns:
-        The interpolated data.
-    """
-    nans = np.isnan(values)
-    idx = lambda z: np.nonzero(z)[0]
-    out = np.copy(values)
-    out[nans] = np.interp(idx(nans), idx(~nans), values[~nans]) if not np.isnan(values).all() else 0
-    return out
-
-
-def medfilt_data(values: np.ndarray, size: int = 15) -> np.ndarray:
-    """
-    Applies a median filter to the data.
-
-    Args:
-        values: The data to be filtered.
-        size: The size of the median filter. Defaults to 15.
-
-    Returns:
-        The filtered data.
-    """
-    padsize = size + 5
-    vpad = np.pad(values, (padsize, padsize), mode='reflect')
-    vpadf = signal.medfilt(vpad, kernel_size=size)
-    return vpadf[padsize:-padsize]
 
 
 class Camera:
@@ -883,13 +850,15 @@ class CameraGroup:
         """
         points_3d_interp = np.apply_along_axis(interpolate_data, 0, points_3d)
         initial_params = points_3d_interp.ravel()
-
+        jac_sparsity = self.get_jac_sparsity(points_2d, n_deriv_smooth, constraints, constraints_weak)
+        
         result = optimize.least_squares(fun=self.compute_residuals, 
                                         x0=initial_params, 
-                                        # bounds=(-np.inf, np.inf), # To be changed
                                         # method='trf', # To be changed
-                                        # loss='linear',
-                                        # jac_sparsity=self.get_jac_sparsity,
+                                        loss='linear',
+                                        ftol = 1e-2,
+                                        # max_nfev = 7,
+                                        jac_sparsity=jac_sparsity,
                                         verbose=2*verbose, 
                                         args=(points_2d, 
                                               scores_2d,
@@ -902,6 +871,50 @@ class CameraGroup:
                                               constraints_weak))
         points_3d_optimized = result.x.reshape(points_3d.shape)
         return points_3d_optimized
+    
+
+    def get_jac_sparsity(self, points_2d, n_deriv_smooth, constraints, constraints_weak):
+        n_cams, n_frames, n_bodyparts, _ = points_2d.shape
+        n_constraints, n_constraints_weak = len(constraints), len(constraints_weak)
+        points_2d_flat = points_2d[..., 0].ravel() # (n_cams * n_frames * n_bodyparts,)
+        mask_valid = ~np.isnan(points_2d_flat)
+
+        n_errors_reproj = np.sum(mask_valid)
+        n_errors_smooth = (n_frames-n_deriv_smooth) * n_bodyparts
+        n_errors_lengths = n_constraints * n_frames
+        n_errors_lengths_weak = n_constraints_weak * n_frames
+        n_errors = n_errors_reproj + n_errors_smooth + n_errors_lengths + n_errors_lengths_weak
+
+        sparse_jac = dok_matrix((n_errors, n_frames*n_bodyparts*3), dtype='int16')
+
+        # Setting the sparsity pattern for reprojection errors
+        indices_params = np.tile(np.arange(n_frames*n_bodyparts), n_cams)
+        indices_params_valid = indices_params[mask_valid]
+        indices_reproj = np.arange(n_errors_reproj)
+        for k in range(3):
+            sparse_jac[indices_reproj, indices_params_valid*3 + k] = 1
+
+        # Setting the sparsity pattern for smoothness constraint
+        frames = np.arange(n_frames-n_deriv_smooth)
+        for j in range(n_bodyparts):
+            for n in range(n_deriv_smooth+1):
+                pa = frames*n_bodyparts + j
+                pb = (frames+n)*n_bodyparts + j
+                for k in range(3):
+                    sparse_jac[n_errors_reproj + pa, pb*3 + k] = 1
+        
+        # Setting the sparsity pattern for strong constraints
+        start = n_errors_reproj + n_errors_smooth
+        point_indices_3d = np.arange(n_frames*n_bodyparts).reshape((n_frames, n_bodyparts))
+        frames = np.arange(n_frames)
+        for cix, (a, b) in enumerate(constraints):
+            pa = point_indices_3d[frames, a]
+            pb = point_indices_3d[frames, b]
+            for k in range(3):
+                sparse_jac[start + cix*n_frames + frames, pa*3 + k] = 1
+                sparse_jac[start + cix*n_frames + frames, pb*3 + k] = 1
+
+        return sparse_jac
 
 
     @jit(forceobj=True, parallel=True)
@@ -914,42 +927,47 @@ class CameraGroup:
 
         residuals = []
         residuals.extend(self.reprojection_residual(points_3d, points_2d, scores_2d, reprojection_error_threshold))
-        residuals.extend(self.smoothness_residual(points_3d, scale_smooth, n_deriv_smooth))
+        residuals.extend(self.smoothness_residual(points_3d, n_deriv_smooth, scale_smooth))
         residuals.extend(self.limb_length_residual(points_3d, constraints, constraints_weak, scale_length, scale_length_weak))
         return np.array(residuals)
 
 
-    def reprojection_residual(self, points_3d, points_2d, scores_2d, reprojection_error_threshold):
+    def reprojection_residual(self, points_3d, points_2d, scores_2d, reproj_thresh):
         n_cams = points_2d.shape[0]
         points_3d_flat = points_3d.reshape(-1, 3)
         points_2d_flat = points_2d.reshape((n_cams, -1, 2))
-        scores_flat = scores_2d.reshape((n_cams, -1))
-
         errors = self.reprojection_error(points_3d_flat, points_2d_flat)
-        errors = errors * scores_flat[:, :, None]
+        # TODO: Maybe not L2 norm, squared L2 norm?
+        errors = np.linalg.norm(errors, axis=2) # (n_cams, n_frames*n_bodyparts)
+        if scores_2d is not None:
+            # TODO: Set proper scores for nan values
+            scores_2d[np.isnan(scores_2d)] = 0
+            scores_flat = scores_2d.reshape((n_cams, -1))
+            errors = errors * scores_flat
         
-        errors_reproj = errors[~np.isnan(errors)]
-
-        errors_reproj = reprojection_error_threshold*2*(np.sqrt(1+errors_reproj/reprojection_error_threshold)-1)
-
-        return errors_reproj
+        # TODO: If the 2D points was interploated, should they be ignored?
+        errors_valid = errors[~np.isnan(errors)] # (n_cams * valid n_frames*n_bodyparts,)
+        return errors_valid
     
 
-    def smoothness_residual(self, points_3d, scale_smooth, n_deriv_smooth):
-        errors_smooth = np.diff(points_3d, n=n_deriv_smooth, axis=0).ravel() * scale_smooth
+    def smoothness_residual(self, points_3d, n_deriv_smooth, scale_smooth):
+        diff = np.diff(points_3d, n=n_deriv_smooth, axis=0)
+        # TODO: Maybe not L2 norm, squared L2 norm?
+        errors = np.linalg.norm(diff, axis=2).ravel() * scale_smooth # (n_frames-n_deriv_smooth * n_bodyparts,)
 
-        return errors_smooth
+        return errors
     
 
     def limb_length_residual(self, points_3d, constraints, constraints_weak, scale_length, scale_length_weak):
         n_frames = points_3d.shape[0]
         joint_lengths = np.array([30, 30, 40, 40, 80, 80, 140, 140, 70, 70, 70, 70, 70, 70, 80, 80], dtype='float64')
     
-        errors_lengths = np.empty((len(joint_lengths), n_frames), dtype='float64')
-        for cix, (a, b) in enumerate(constraints):
-            lengths = np.linalg.norm(points_3d[:, a] - points_3d[:, b], axis=1)
-            expected = joint_lengths[cix]
-            errors_lengths[cix] = 100*(lengths - expected)/expected
-        errors_lengths = errors_lengths.ravel() * scale_length
+        errors = np.empty((len(joint_lengths), n_frames), dtype='float64')
+        for cix, (bp1, bp2) in enumerate(constraints):
+            actual_lengths = np.linalg.norm(points_3d[:, bp1] - points_3d[:, bp2], axis=1)
+            expected_length = joint_lengths[cix]
+            # TODO: Maybe not L2 norm, squared L2 norm?
+            errors[cix] = np.abs(actual_lengths - expected_length)
+        errors = errors.ravel() * scale_length # (n_constraints * n_frames,)
 
-        return errors_lengths
+        return errors

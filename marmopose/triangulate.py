@@ -119,28 +119,28 @@ def triangulate_with_optimization(config: Dict[str, Any],
     points_3d_init = points_3d_init.reshape((n_frames, n_bodyparts, 3))
 
     if verbose: print('Optimizing...')
-    points_3d = camera_group.optim_points(points_2d, 
-                                    points_3d_init,
-                                    scores_2d=scores_2d,
-                                    constraints=constraints,
-                                    constraints_weak=constraints_weak,
-                                    scale_smooth=config['triangulation']['scale_smooth'],
-                                    scale_length=config['triangulation']['scale_length'],
-                                    scale_length_weak=config['triangulation']['scale_length_weak'],
-                                    reproj_error_threshold=config['triangulation']['reproj_error_threshold'],
-                                    n_deriv_smooth=config['triangulation']['n_deriv_smooth'],
-                                    verbose=verbose)
-    # points_3d = camera_group.optimize(points_2d=points_2d, 
-    #                                 points_3d=points_3d_init,
+    # points_3d = camera_group.optim_points(points_2d, 
+    #                                 points_3d_init,
     #                                 scores_2d=scores_2d,
     #                                 constraints=constraints,
     #                                 constraints_weak=constraints_weak,
     #                                 scale_smooth=config['triangulation']['scale_smooth'],
     #                                 scale_length=config['triangulation']['scale_length'],
     #                                 scale_length_weak=config['triangulation']['scale_length_weak'],
-    #                                 reprojection_error_threshold=config['triangulation']['reproj_error_threshold'],
+    #                                 reproj_error_threshold=config['triangulation']['reproj_error_threshold'],
     #                                 n_deriv_smooth=config['triangulation']['n_deriv_smooth'],
     #                                 verbose=verbose)
+    points_3d = camera_group.optimize(points_3d=points_3d_init,
+                                      points_2d=points_2d, 
+                                      scores_2d=scores_2d,
+                                      reprojection_error_threshold=config['triangulation']['reproj_error_threshold'],
+                                      n_deriv_smooth=config['triangulation']['n_deriv_smooth'],
+                                      scale_smooth=config['triangulation']['scale_smooth'],
+                                      scale_length=config['triangulation']['scale_length'],
+                                      scale_length_weak=config['triangulation']['scale_length_weak'],
+                                      constraints=constraints,
+                                      constraints_weak=constraints_weak,
+                                      verbose=verbose)
     
     points_3d_flat = points_3d.reshape(-1, 3)
 
@@ -226,8 +226,8 @@ def triangulate(config: Dict[str, Any], filtered: bool = False, verbose: bool = 
     all_scores = all_cam_points_scores[..., 2] # (n_cams, n_tracks, n_frames, n_bodyparts)
 
     # Mark points below score threshold as NaN
-    invalid = all_scores < config['triangulation']['score_threshold']
-    all_points[invalid] = np.nan
+    # invalid = all_scores < config['triangulation']['score_threshold']
+    # all_points[invalid] = np.nan
 
     _, n_tracks, _, _, _ = all_points.shape
     bodyparts = metadata['bodyparts']

@@ -11,8 +11,7 @@ DEFAULT_CONFIG = {
     },
     'filter': {
         'enable': False,
-        'type': 'myfilter',
-        'score_threshold': 0.1
+        'score_threshold': 0.2
     },
     'triangulation': {
         'optim': False,

@@ -32,12 +32,15 @@ if __name__ == '__main__':
     # plot_scores(config)
     # plot_visibility(config, mode='count')
 
+    # from marmopose.filter import filter_2d
+    # filter_2d(config, verbose = True)
+
     # from marmopose.visualize_2d import generate_video_2d
-    # generate_video_2d(config, filtered = False, verbose = True)
+    # generate_video_2d(config, filtered = True, verbose = True)
 
     from marmopose.triangulate import triangulate
     from marmopose.utils.plots import plot_triangulation_errors
-    triangulate(config, filtered = False, verbose = True)
+    triangulate(config, filtered = True, verbose = True)
     # plot_triangulation_errors(config)
 
     from marmopose.visualize_3d import generate_video_3d

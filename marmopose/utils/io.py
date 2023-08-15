@@ -198,7 +198,7 @@ def load_coordinates(coordinates_filepath: str, key: str) -> Any:
     return data_dict[key]
 
 
-def load_bodypart_constraints(config: Dict[str, Any], bodyparts: List[str], key: str = 'constraints') -> np.ndarray(List[List[int]]):
+def load_bodypart_constraints(config: Dict[str, Any], bodyparts: List[str], key: str = 'constraints') -> np.ndarray:
     """
     Load constraints for bodypart indices from the configuration.
 
