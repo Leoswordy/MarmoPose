@@ -11,7 +11,7 @@ mlab.options.offscreen = True
 
 import sleap
 from marmopose.utils.common import Timer
-from marmopose.triangulate import calculate_3d_axes, transform_coordinates, triangulate_without_optimization, triangulate_with_optimization
+from marmopose.triangulate import calculate_3d_axes, transform_coordinates, triangulate, optimize
 from marmopose.visualize_3d import initialize_3d, get_frame_3d
 
 
@@ -93,6 +93,7 @@ class PredictProcess(Process):
         self.points_3d_queue = points_3d_queue
         self.points_2d_queue = points_2d_queue
         self.images_2d_queue = images_2d_queue
+        self.points_3d_cache = [] # For optimization
 
         self.crop_size = crop_size
         self.previous_roi = None
@@ -137,6 +138,7 @@ class PredictProcess(Process):
                 all_points_3d, all_scores_3d = None, None
             timer.record('Triangulate')
             self.points_3d_queue.put((all_points_3d, all_scores_3d))
+            self.points_3d_cache.append(all_points_3d) # For optimization
 
             self.previous_roi = self.calculate_roi(all_points_shifted[0]) if self.crop_size is not None else None
             if self.verbose: timer.show()
@@ -216,13 +218,22 @@ class PredictProcess(Process):
         _, _, n_bodyparts, _ = all_points.shape
         all_points_3d, all_scores_3d = [], []
 
-        for points, scores in zip(all_points, all_scores):
+        for track_idx, (points, scores) in enumerate(zip(all_points, all_scores)):
             points = points.reshape(self.n_cams, -1, n_bodyparts, 2)
             scores = scores.reshape(self.n_cams, -1, n_bodyparts)
+            
+            points_3d, scores_3d, _, _ = triangulate(points, scores, self.camera_group, verbose=False)
+            s = time.time()
             if self.config['triangulation']['optim']:
-                points_3d, scores_3d, _, _ = triangulate_with_optimization(self.config, self.config['bodyparts'], points, scores, self.camera_group, verbose=False)
-            else:
-                points_3d, scores_3d, _, _ = triangulate_without_optimization(points, scores, self.camera_group, verbose=False)
+                previous_points_3d = self.points_3d_cache[-1][track_idx] if len(self.points_3d_cache) > 0 else None
+                if previous_points_3d is not None:
+                    points_3d_concat = np.concatenate((previous_points_3d, points_3d), axis=0)
+                    points_concat = np.concatenate((points, points), axis=1)
+                    scores_concat = np.concatenate((scores, scores), axis=1)
+                    points_3d_concat_processed = optimize(self.config, points_3d_concat, points_concat, scores_concat, self.camera_group, -1, verbose=False)
+                    points_3d = points_3d_concat_processed[-1:]
+            end = time.time()
+            print(f'Optimize: {end-s:.3f}s')
             points_3d = transform_coordinates(points_3d, self.rotation_matrix, self.center)
             all_points_3d.append(points_3d)
             all_scores_3d.append(scores_3d)

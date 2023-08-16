@@ -6,10 +6,10 @@ video_extension = 'mp4'
 cam_regex = 'cam(\d)'
 
 # Models in this folder would be used to predict the 2d bodyparts
-model_dir = 'D:\Sync\MarmoPose\data\models\single_v2.3' 
+model_dir = '/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoSync/data/models/single_v1.2' 
 
 # All resources should be stored in this directory
-project_dir = 'C:\Users\Leosword\Desktop\demos\single_5s'
+project_dir = '/Users/leosword/Desktop/demos/single_30s'
 
 # The ordered bodyparts name, should be the same as 2D predict model
 bodyparts = ['head', 'leftear', 'rightear', 'neck', 'leftelbow', 'rightelbow', 'lefthand', 'righthand', 'spinemid', 'tailbase', 'leftknee', 'rightknee', 'leftfoot', 'rightfoot', 'tailmid', 'tailend']
@@ -70,9 +70,6 @@ scale_smooth = 1
 # Strength of enforcement of the spatial constraints
 scale_length = 2
 scale_length_weak = 1
-
-# Reprojection error threshold
-reproj_error_threshold = 10
 
 # Smooth frames
 n_deriv_smooth = 1

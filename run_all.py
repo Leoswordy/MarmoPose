@@ -38,10 +38,10 @@ if __name__ == '__main__':
     # from marmopose.visualize_2d import generate_video_2d
     # generate_video_2d(config, filtered = True, verbose = True)
 
-    from marmopose.triangulate import triangulate
+    from marmopose.triangulate import compute_3d_coords
     from marmopose.utils.plots import plot_triangulation_errors
-    triangulate(config, filtered = False, verbose = True)
-    # plot_triangulation_errors(config)
+    compute_3d_coords(config, filtered = False, optim_start_frame=0, verbose = True)
+    plot_triangulation_errors(config)
 
     from marmopose.visualize_3d import generate_video_3d
     generate_video_3d(config)
@@ -60,5 +60,3 @@ if __name__ == '__main__':
     # realtime_inference(config, camera_paths=camera_paths, compute_3d=True, 
     #                    display_3d=True, display_2d=True, display_scale=0.5,
     #                    crop_size=640, max_queue_size=1500, verbose=True, local_mode=True)
-
-

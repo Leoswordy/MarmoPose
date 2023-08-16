@@ -85,13 +85,61 @@ def transform_coordinates(points_3d: np.ndarray, rotation_matrix: np.ndarray, ce
     return points_3d_adj
 
 
-def triangulate(config: Dict[str, Any], filtered: bool = False, verbose: bool = False) -> None:
+def triangulate(points_2d: np.ndarray, 
+                scores_2d: np.ndarray, 
+                camera_group: Any,
+                verbose: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Handles the case of non-optimization by directly triangulating the 3D points.
+
+    Args:
+        points_2d: 2D points data with shape of (n_cams, n_frames, n_bodyparts, [x,y] coordinates).
+        scores_2d: 2D score data with shape of (n_cams, n_frames, n_bodyparts).
+        camera_group: The CameraGroup instance used for triangulation.
+        verbose: If True, the function will display detailed messages about its progress.
+
+    Returns:
+        points_3d: Triangulated 3D points data.
+        scores_3d: 3D scores.
+        errors: Reprojection errors.
+        valid_cams: Number of valid cameras for each point.
+    """
+    n_cams, n_frames, n_bodyparts, _ = points_2d.shape
+
+    points_2d_flat = points_2d.reshape(n_cams, n_frames*n_bodyparts, 2)
+    if verbose: print('Triangulating...')
+    points_3d_flat = camera_group.triangulate(points_2d_flat, show_progress=verbose)
+    points_3d = points_3d_flat.reshape((n_frames, n_bodyparts, 3))
+
+    errors = camera_group.reprojection_error(points_3d_flat, points_2d_flat, mean=True)
+    errors = errors.reshape(n_frames, n_bodyparts)
+
+    good_points = ~np.isnan(points_2d[:, :, :, 0])
+    valid_cams = np.sum(good_points, axis=0).astype('float')
+    scores_2d[~good_points] = 2
+    scores_3d = np.min(scores_2d, axis=0)
+    scores_3d[valid_cams < 2] = np.nan
+    errors[valid_cams < 2] = np.nan
+    valid_cams[valid_cams < 2] = np.nan
+
+    return points_3d, scores_3d, errors, valid_cams
+
+
+def optimize(config, points_3d, points_2d, scores_2d, camera_group, optim_start_frame, reproject=False, verbose=False):
+    points_3d = camera_group.optimize(config, points_3d, points_2d, scores_2d, optim_start_frame, verbose)
+    if reproject:
+        points_2d_reprojected = camera_group.reproject(points_3d).reshape(points_2d.shape)
+    return points_3d
+
+
+def compute_3d_coords(config: Dict[str, Any], filtered: bool = False, optim_start_frame: int = 0, verbose: bool = False) -> None:
     """
     Generate 3d coordinates for each track based on 2d coordinates and camera parameters.
 
     Args:
         config: Configuration dictionary.
         filtered: If True, load pose paths that have been filtered.
+        optim_start_frame: The frame number from which optimization starts.
         verbose: If True, the function will display detailed messages about its progress.
     
     Returns:
@@ -124,20 +172,10 @@ def triangulate(config: Dict[str, Any], filtered: bool = False, verbose: bool = 
     for track_idx in range(n_tracks):
         track_name = metadata["tracks"][track_idx]
         print(f'*************** {track_name} ***************')
-        
-        # if config['triangulation']['optim']:
-        #     points_3d, scores_3d, errors, valid_cams = triangulate_with_optimization(config, bodyparts, all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
-        # else:
-        #     points_3d, scores_3d, errors, valid_cams = triangulate_without_optimization(all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
 
-        points_3d, scores_3d, errors, valid_cams = triangulate_without_optimization(all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
+        points_3d, scores_3d, errors, valid_cams = triangulate(all_points[:, track_idx], all_scores[:, track_idx], camera_group, verbose)
         if config['triangulation']['optim']:
-            points_3d = camera_group.optimize(config, 
-                                              points_3d=points_3d,
-                                              points_2d=all_points[:, track_idx], 
-                                              scores_2d=all_scores[:, track_idx],
-                                              start_frame=25, # TODO: change it to a parameter
-                                              verbose=verbose)
+            points_3d = optimize(config, points_3d, all_points[:, track_idx], all_scores[:, track_idx], camera_group, optim_start_frame, reproject=True, verbose=verbose)
         
         points_3d = transform_coordinates(points_3d, rotation_matrix, center)
 
@@ -218,46 +256,3 @@ def triangulate_with_optimization(config: Dict[str, Any],
     errors[valid_cams < 1] = np.nan
 
     return points_3d, scores_3d, errors, valid_cams
-
-
-def triangulate_without_optimization(points_2d: np.ndarray, 
-                                     scores_2d: np.ndarray, 
-                                     camera_group: Any,
-                                     verbose: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Handles the case of non-optimization by directly triangulating the 3D points.
-
-    Args:
-        points_2d: 2D points data with shape of (n_cams, n_frames, n_bodyparts, [x,y] coordinates).
-        scores_2d: 2D score data with shape of (n_cams, n_frames, n_bodyparts).
-        camera_group: The CameraGroup instance used for triangulation.
-        verbose: If True, the function will display detailed messages about its progress.
-
-    Returns:
-        points_3d: Triangulated 3D points data.
-        scores_3d: 3D scores.
-        errors: Reprojection errors.
-        valid_cams: Number of valid cameras for each point.
-    """
-    n_cams, n_frames, n_bodyparts, _ = points_2d.shape
-
-    points_2d_flat = points_2d.reshape(n_cams, n_frames*n_bodyparts, 2)
-    if verbose: print('Triangulating...')
-    points_3d_flat = camera_group.triangulate(points_2d_flat, show_progress=verbose)
-    points_3d = points_3d_flat.reshape((n_frames, n_bodyparts, 3))
-
-    
-    errors = camera_group.reprojection_error(points_3d_flat, points_2d_flat, mean=True)
-    errors = errors.reshape(n_frames, n_bodyparts)
-
-    good_points = ~np.isnan(points_2d[:, :, :, 0])
-    valid_cams = np.sum(good_points, axis=0).astype('float')
-    scores_2d[~good_points] = 2
-    scores_3d = np.min(scores_2d, axis=0)
-    scores_3d[valid_cams < 2] = np.nan
-    errors[valid_cams < 2] = np.nan
-    valid_cams[valid_cams < 2] = np.nan
-
-    return points_3d, scores_3d, errors, valid_cams
-
-

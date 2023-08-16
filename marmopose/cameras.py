@@ -492,6 +492,22 @@ class CameraGroup:
                 out[ip] = triangulate_simple(sub_points[valid_points], cam_mats[valid_points])
 
         return out
+    
+    
+    def reproject(self, points_3d):
+        """
+        Given an Nx3 array of 3D points, projects the points to 2D image plane.
+
+        Args:
+            points_3d: 3D points with shape (N, 3).
+
+        Returns:
+            2D points with shape (C, N, 2).
+        """
+        points_3d = np.array(points_3d)
+        points_2d = np.array([cam.project(points_3d) for cam in self.cameras])
+        points_2d = np.array([cam.distort_points(np.copy(pt)) for pt, cam in zip(points_2d, self.cameras)])
+        return points_2d
 
 
     @jit(parallel=True, forceobj=True)
@@ -542,16 +558,11 @@ class CameraGroup:
         Optimize the 3D points by minimizing the reprojection error, smoothness error, limb length error.
 
         Args:
+            config: Configuration dictionary.
             points_3d: 3D points with shape (n_frames, n_bodyparts, 3).
             points_2d: 2D points with shape (n_cams, n_frames, n_bodyparts, 2).
             scores_2d: Scores for the 2D points with shape (n_cams, n_frames, n_bodyparts).
             start_frame: Index of the first frame to optimize.
-            n_deriv_smooth: Order of the derivative used for the smoothness constraint.
-            scale_smooth: Scale for the smoothness term in the error function.
-            scale_length: Scale for the length term in the error function for strong constraints.
-            scale_length_weak: Scale for the length term in the error function for weak constraints.
-            constraints: List of pairs of indices, each representing a rigid link between two body parts.
-            constraints_weak: List of pairs of indices, each representing a weakly rigid link between two body parts.
             verbose: If True, the function will print detailed information.
 
         Returns:
@@ -653,11 +664,12 @@ class CameraGroup:
         n_cams, n_frames, n_joints, _ = points_2d.shape
         points_3d = points_3d_flat.reshape((n_frames, n_joints, 3))
 
-        residuals = []
-        residuals.extend(self.reprojection_residual(points_3d, points_2d, scores_2d))
-        residuals.extend(self.smoothness_residual(points_3d, n_deriv_smooth, scale_smooth))
-        residuals.extend(self.limb_length_residual(points_3d, constraints, constraints_weak, scale_length, scale_length_weak))
-        return np.array(residuals)
+        errors_reproj = self.reprojection_residual(points_3d, points_2d, scores_2d)
+        errors_smooth = self.smoothness_residual(points_3d, n_deriv_smooth, scale_smooth)
+        errors_lengths = self.limb_length_residual(points_3d, constraints, constraints_weak, scale_length, scale_length_weak)
+        
+        residuals = np.hstack((errors_reproj, errors_smooth, errors_lengths))
+        return residuals
 
 
     def reprojection_residual(self, points_3d, points_2d, scores_2d):
@@ -678,7 +690,8 @@ class CameraGroup:
         return errors_valid
     
 
-    def smoothness_residual(self, points_3d, n_deriv_smooth, scale_smooth):
+    @staticmethod
+    def smoothness_residual(points_3d, n_deriv_smooth, scale_smooth):
         diff = np.diff(points_3d, n=n_deriv_smooth, axis=0)
         # TODO: Maybe not L2 norm, squared L2 norm?
         errors = np.linalg.norm(diff, axis=2).ravel() * scale_smooth # (n_frames-n_deriv_smooth * n_bodyparts,)
@@ -686,7 +699,8 @@ class CameraGroup:
         return errors
     
 
-    def limb_length_residual(self, points_3d, constraints, constraints_weak, scale_length, scale_length_weak):
+    @staticmethod
+    def limb_length_residual(points_3d, constraints, constraints_weak, scale_length, scale_length_weak):
         n_frames = points_3d.shape[0]
         joint_lengths = np.array([30, 30, 40, 40, 80, 80, 70, 70, 70, 70, 70, 70], dtype='float64')
         joint_lengths_weak = np.array([140, 140, 80, 80], dtype='float64')

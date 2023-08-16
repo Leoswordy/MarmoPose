@@ -6,10 +6,10 @@ video_extension = 'mp4'
 cam_regex = 'cam(\d)'
 
 # Models in this folder would be used to predict the 2d bodyparts
-model_dir = ['D:\Sync\MarmoPose\data\models\230730_204120.centroid.n=1178', 'D:\Sync\MarmoPose\data\models\centered_instance_v2']
+model_dir = ['/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoSync/data/models/centroid_v1.2', '/Users/leosword/Library/CloudStorage/Nutstore-1203442707@qq.com/MarmoSync/data/models/centered_instance_v2']
 
 # All resources should be stored in this directory
-project_dir = 'D:\ccq\demos\double_8s_tracker'
+project_dir = '/Users/leosword/Desktop/demos/double_8s_tracker'
 
 # The ordered bodyparts name, should be the same as 2D predict model
 bodyparts = ['head', 'leftear', 'rightear', 'neck', 'leftelbow', 'rightelbow', 'lefthand', 'righthand', 'spinemid', 'tailbase', 'leftknee', 'rightknee', 'leftfoot', 'rightfoot', 'tailmid', 'tailend']
@@ -36,9 +36,6 @@ fisheye = true
 
 [filter]
 enable = true
-
-# Type of filter to apply
-type = 'myfilter'
 
 # Labels with score below the threshold are removed
 score_threshold = 0.0
@@ -67,17 +64,14 @@ score_threshold = 0.1
 optim = true
 
 # Strength of enforcement of the smoothing constraints
-scale_smooth = 5
+scale_smooth = 1
 
 # Strength of enforcement of the spatial constraints
-scale_length = 4
-scale_length_weak = 2
-
-# Reprojection error threshold
-reproj_error_threshold = 10
+scale_length = 2
+scale_length_weak = 1
 
 # Smooth frames
-n_deriv_smooth = 3
+n_deriv_smooth = 1
 
 # Bodyparts pairs require constraints
 constraints = [
@@ -87,19 +81,18 @@ constraints = [
    ['leftear', 'neck'],
    ['neck', 'spinemid'],
    ['spinemid', 'tailbase'],
-   ['tailbase', 'tailmid'], 
-   ['tailmid', 'tailend'],
    ['neck', 'rightelbow'], 
    ['rightelbow', 'righthand'],
    ['neck', 'leftelbow'], 
    ['leftelbow', 'lefthand'],
-   
    ['tailbase', 'rightknee'],
    ['tailbase', 'leftknee'],
-   ['rightknee', 'rightfoot'],
-   ['leftknee', 'leftfoot']
 ]
 
 # Bodyparts pairs require weak constraints
-constraints_weak = []
-
+constraints_weak = [
+   ['tailbase', 'tailmid'], 
+   ['tailmid', 'tailend'],
+   ['rightknee', 'rightfoot'],
+   ['leftknee', 'leftfoot']
+]
