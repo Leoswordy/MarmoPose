@@ -62,11 +62,11 @@ def predict_labels(video: sleap.Video, model_dir: str, batch_size: int, multi_an
         labels: Predicted labels for the video.
     """
     progress_reporting = 'none' if not verbose else 'rich'
-    if multi_animal:
-        predictor = sleap.load_model(model_dir, batch_size=batch_size, peak_threshold=0.1, progress_reporting=progress_reporting,
-                                     tracker='flow', tracker_max_instances=2, tracker_window=10)
-    else:
-        predictor = sleap.load_model(model_dir, batch_size=batch_size, peak_threshold=0.1, progress_reporting=progress_reporting)
+    # if multi_animal:
+    #     predictor = sleap.load_model(model_dir, batch_size=batch_size, peak_threshold=0.1, progress_reporting=progress_reporting,
+    #                                  tracker='flow', tracker_max_instances=n_tracks, tracker_window=10)
+    # else:
+    predictor = sleap.load_model(model_dir, batch_size=batch_size, peak_threshold=0.1, progress_reporting=progress_reporting)
 
     timer = Timer().start()
 

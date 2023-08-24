@@ -9,7 +9,7 @@ ne.set_num_threads(ne.detect_number_of_cores())
 
 if __name__ == '__main__':
     from marmopose.utils.config import load_config
-    config_file = './marmopose/config/config_single_marmoset.toml'
+    config_file = './marmopose/config/config_double_marmoset_id.toml'
     config = load_config(config_file)
 
     # from marmopose.calibrate import calibrate
@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     # from marmopose.predict import predict
     # from marmopose.utils.plots import plot_scores, plot_visibility
-    # predict(config, batch_size=4, multi_animal = False, verbose = True)
+    # predict(config, batch_size=2, multi_animal = True, verbose = True)
     # plot_scores(config)
     # plot_visibility(config, mode='count')
 
@@ -36,18 +36,18 @@ if __name__ == '__main__':
     # filter_2d(config, verbose = True)
 
     # from marmopose.visualize_2d import generate_video_2d
-    # generate_video_2d(config, filtered = True, verbose = True)
+    # generate_video_2d(config, filtered = False, verbose = True)
 
     from marmopose.triangulate import compute_3d_coords
     from marmopose.utils.plots import plot_triangulation_errors
     compute_3d_coords(config, filtered = False, optim_start_frame=0, verbose = True)
-    plot_triangulation_errors(config)
+    # plot_triangulation_errors(config)
 
     from marmopose.visualize_3d import generate_video_3d
     generate_video_3d(config)
 
-    # from marmopose.visualize_combined import generate_video_combined
-    # generate_video_combined(config)
+    from marmopose.visualize_combined import generate_video_combined
+    generate_video_combined(config)
 
     # from marmopose.realtime.main import realtime_inference
     # camera_paths = [
