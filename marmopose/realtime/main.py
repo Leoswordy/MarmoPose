@@ -1,55 +1,55 @@
-import os
-from glob import glob
+from pathlib import Path
 from multiprocessing import Queue, Event
-from typing import List, Dict
+from typing import List, Dict, Any
 
-from marmopose.realtime.processor import PredictProcess
-from marmopose.realtime.control import EventControl
-from marmopose.utils.common import get_camera_group, get_cam_name
+from marmopose.realtime.data_processor import PredictProcess
+from marmopose.realtime.controller import EventControl
+from marmopose.calibration.cameras import CameraGroup
+    
+
+def get_camera_group(config: Dict[str, Any], cam_names: List[str]) -> Any:
+    """
+    Loads camera group from the calibration file and returns a subset camera group with specific camera names.
+
+    Args:
+        config: A dictionary containing configurations.
+        cam_names: A list of camera names.
+
+    Returns:
+        A subset camera group with specific camera names.
+    """
+    project_dir = Path(config['directory']['project'])
+    calibration_path = project_dir / config['directory']['calibration'] / 'camera_params.json'
+
+    camera_group = CameraGroup.load_from_json(calibration_path)
+    return camera_group.subset_cameras_names(cam_names)
 
 
 IP_DICT = {
-    'rtsp://admin:abc12345@192.168.1.240:554//Streaming/Channels/101': '1', 
-    'rtsp://admin:abc12345@192.168.1.242:554//Streaming/Channels/101': '2', 
-    'rtsp://admin:abc12345@192.168.1.244:554//Streaming/Channels/101': '3', 
-    'rtsp://admin:abc12345@192.168.1.246:554//Streaming/Channels/101': '4', 
-    'rtsp://admin:abc12345@192.168.1.248:554//Streaming/Channels/101': '5', 
-    'rtsp://admin:abc12345@192.168.1.250:554//Streaming/Channels/101': '6'
+    'rtsp://admin:abc12345@192.168.1.240:554//Streaming/Channels/101': 'cam1', 
+    'rtsp://admin:abc12345@192.168.1.242:554//Streaming/Channels/101': 'cam2', 
+    'rtsp://admin:abc12345@192.168.1.244:554//Streaming/Channels/101': 'cam3', 
+    'rtsp://admin:abc12345@192.168.1.246:554//Streaming/Channels/101': 'cam4', 
+    'rtsp://admin:abc12345@192.168.1.248:554//Streaming/Channels/101': 'cam5', 
+    'rtsp://admin:abc12345@192.168.1.250:554//Streaming/Channels/101': 'cam6'
 }
 
 
-def realtime_inference(config: Dict, 
+def realtime_inference(config: Dict[str, Any], 
                        camera_paths: List[str], 
                        compute_3d: bool = True, 
                        display_3d: bool = True,
                        display_2d: bool = False, 
                        display_scale: float = 0.5, 
-                       crop_size: int = 600, 
+                       crop_size: int = 640, 
                        max_queue_size: int = 1500, 
                        verbose: bool = True, 
                        local_mode: bool = False):
-    """
-    Performs real-time inference and display results. 
-
-    Args:
-        config: Configuration dictionary.
-        camera_paths: Paths to the camera. Typically IP addresses.
-        compute_3d: Compute 3D predictions. Defaults to True.
-        display_3d: Display 3D predictions. Defaults to True.
-        display_2d: Display 2D predictions. Defaults to False.
-        display_scale: Display scaling factor. Defaults to 0.5.
-        crop_size: Crop size for the predictions. Defaults to 600.
-        max_queue_size: Maximum queue size for multiprocessing queues. Defaults to 1500.
-        verbose: Print verbose logs. Defaults to True.
-        local_mode: If true, use local videos for debugging. Defaults to False.
-    """
     if local_mode:
-        project_dir = config['project_dir']
-        videos_raw_dir = config['directory']['videos_raw']
-        video_extension = config['video_extension']
-        cam_regex = config['cam_regex']
-        camera_paths = sorted(glob(os.path.join(project_dir, videos_raw_dir, '*.' + video_extension)))[:len(camera_paths)]
-        camera_names = [get_cam_name(camera_path, cam_regex) for camera_path in camera_paths]
+        project_dir = Path(config['directory']['project'])
+        videos_raw_dir = project_dir / config['directory']['videos_raw']
+        camera_paths = sorted(videos_raw_dir.glob(f"*.{config['video_extension']}"))
+        camera_names = [cam_path.stem for cam_path in camera_paths]
     else:
         camera_names = [IP_DICT.get(camera_path, None) for camera_path in camera_paths]
 
