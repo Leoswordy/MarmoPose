@@ -1,33 +1,21 @@
-# Maintain
-- previous_offset: (n_cams, n_tracks, xy)
-- could crop it with (x, y, crop_size, crop_size)
-- crops: (n_cams, n_tracks, crop_size, crop_size, n_channels)
+# MarmoPose
 
+## Introduction
+A complete multi-marmoset 3D pose tracking system.
 
-# Read image
-- images: (n_cams, width, height, channel)
+## Features
+- 3D pose tracking for multiple marmosets, with a comprehensive processing pipeline.
+- Supports low-latency closed-loop experimental control based on the 3D poses of marmosets.
+- User-friendly deployment in a typical marmoset family cage.
+- Employs a marmoset skeleton model for 3D coordinates optimization.
 
-# Preprocess
-## Single
-- If previous_offset of a cam is none (nan), predict all the whole image(to be add a centorid model?)
-## Multi
-- If any previous_offset of a cam if none, repredict the roi of the cam, get offsets
-- Combine it with other prev_offset, get crops and pass to the conf model
+## Getting Started
+### Installation
+1. Install SLEAP from https://sleap.ai/installation.html
+2. pip install mayavi ffmpeg tqdm
 
-# Predict
-- Pred: (n_cams, n_tracks, n_bodyparts, (x, y, score))
-
-# Postprocess points
-- Add Pred and previous_offset, get the true coordinates
-
-# Postprocess previous_offset
-- If track not found, set it to nan, else update offset (Padding or move???)
-
-# Label image
-- Label image with preds
-
-# Triangulate
-- swap points_2d (0, 1) to (n_tracks, n_cams, n_bodyparts, 3)
-- Add new axis in the for loop: (n_cams, n_frames=1. n_bodyparts, 3)
-- triangulate result (n_frames=1, n_bodyparts, 3)
-- merge (n_tracks, n_frames=1, n_bodyparts, 3)
+## Usage
+- Train new models, or download models from ？
+- run.py: offline process
+- run_realtime.py: real-time process
+- specify project and model directory, then follow the comments

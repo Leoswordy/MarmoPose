@@ -4,6 +4,7 @@ from multiprocessing import Queue, Event
 from typing import Dict, Any
 
 from marmopose.realtime.data_processor import DisplayProcess
+from marmopose.processing.autoencoder import PoseProcessor
 
 
 class EventControl:
@@ -39,6 +40,7 @@ class EventControl:
         self.stop_event = stop_event
 
         self.bodyparts_dict = {bp: idx for idx, bp in enumerate(config['animal']['bodyparts'])}
+        self.poseprocessor = PoseProcessor(config['animal']['bodyparts'])
 
         self.display = display_3d or display_2d
         self.verbose = verbose
@@ -81,21 +83,50 @@ class EventControl:
             all_points_3d: All 3D points. Shape of (n_tracks, n_frames=1, n_bodyparts, (x,y,z)))
         """
         # Template code for dealing with 3D coordinates
-        if all_points_3d is not None:
-            points_3d_track1 = all_points_3d[0, 0] #(n_bodyparts, 3)
+        # if all_points_3d is not None:
+        #     pass
+            # ========== Complex detection ==========
+            # signal = self.detect_watch_left(all_points_3d[0])
+            # if signal:
+            #     print('Watch left!!!')
 
-            # Get any bodypart of interest
-            target_bodypart = 'head'
-            target_3d_position = points_3d_track1[self.bodyparts_dict[target_bodypart]] #(x, y, z)
+            # ========== Get any bodypart of interest ==========
+            # points_3d_track1 = all_points_3d[0, 0] #(n_bodyparts, 3)
+            # target_bodypart = 'head'
+            # target_3d_position = points_3d_track1[self.bodyparts_dict[target_bodypart]] #(x, y, z)
 
-            # Or get the average of all the bodyparts
-            avg_3d_position = np.nanmean(points_3d_track1, axis=0)
+            # ========== Or get the average of all the bodyparts ==========
+            # avg_3d_position = np.nanmean(points_3d_track1, axis=0)
 
             # if avg_3d_position[1] > 400:
             #     print('On the right side!!!')
             # if avg_3d_position[2] > 300:
             #     print('Jumping!!!')
         
-        # Deal with 2D coordinates
+        # ========== Deal with 2D coordinates ==========
         points_2d_track1_cam1 = all_points_with_score_2d[0, 0] # (n_bodyparts, 3)
         # Any other operations ...
+    
+    def detect_watch_left(self, points_3d):
+        normalized_pose = self.poseprocessor.normalize(points_3d)[0] # (n_bodyparts, 3)
+
+        head = normalized_pose[self.bodyparts_dict['head']]
+        mid = (normalized_pose[self.bodyparts_dict['leftear']] + normalized_pose[self.bodyparts_dict['rightear']])/2
+        direction = head - mid
+
+
+        N = np.array([0, 1, 0]) 
+        V_normalized = direction / np.linalg.norm(direction)
+        N_normalized = N / np.linalg.norm(N)
+
+        cos_theta = np.dot(V_normalized, N_normalized)
+        theta = np.arccos(cos_theta)
+
+        angle_with_plane = np.pi/2 - theta
+        angle_with_plane_degrees = np.degrees(angle_with_plane)
+
+        if angle_with_plane_degrees > 45:
+            return True
+        return False
+
+

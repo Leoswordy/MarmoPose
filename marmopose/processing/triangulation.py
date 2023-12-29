@@ -39,6 +39,7 @@ def triangulate(config: Dict[str, Any], points_2d_source: str = 'filtered', verb
 
         points_with_score_2d = all_points_with_score_2d[:, track_idx] # (n_cams, n_frames, n_bodyparts, (x, y, score)))
         points_3d = reconstruct_3d_coordinates(points_with_score_2d, camera_group, verbose) # (n_frames, n_bodyparts, (x, y, z))
+
         save_points_3d_h5(points=points_3d, 
                           name=track_name, 
                           file_path=points_3d_path, 

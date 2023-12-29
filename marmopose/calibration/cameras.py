@@ -2,7 +2,6 @@ import cv2
 import json
 import queue
 import numpy as np
-from numba import jit
 from tqdm import trange
 from pprint import pprint
 from scipy import optimize
@@ -468,6 +467,15 @@ class CameraGroup:
                 mixed = [(o, i) for (o, i) in zip(objp, imgp) if len(o) >= 7]
                 objp, imgp = zip(*mixed)
                 matrix = cv2.initCameraMatrix2D(objp, imgp, tuple(size))
+
+
+                # ======================================================================
+                # TODO: Optimize this, it is used to avoid nan in init camera matrix, better calibration video could avoid this
+                # matrix[0][0] = matrix[1][1] = 1078.0
+                # matrix = np.nan_to_num(matrix, nan=1000.0)
+                print(matrix)
+                # ======================================================================
+
                 camera.set_camera_matrix(matrix)
 
         for i, (row, cam) in enumerate(zip(all_rows, self.cameras)):
@@ -656,7 +664,6 @@ class CameraGroup:
         error = self.average_error(p2ds)
         return error
     
-    @jit(parallel=True, forceobj=True)
     def _error_fun_bundle(self, params, p2ds, n_cam_params, extra):
         """Error function for bundle adjustment"""
         good = ~np.isnan(p2ds)

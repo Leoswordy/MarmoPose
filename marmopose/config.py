@@ -10,8 +10,8 @@ DEFAULT_CONFIG = {
         'fisheye': True
     },
     'visualization': {
-        'track_cmap': 'tab10',
-        'skeleton_cmap': 'Set2'
+        'track_cmap': 'Set2',
+        'skeleton_cmap': 'hls'
     },
     'filter': {
         'threshold': 0.2
@@ -54,7 +54,7 @@ def set_defaults(target: Dict[str, Any], defaults: Dict[str, Any]) -> None:
             set_defaults(target[key], value)
             
 
-def load_config(config_path: str, project_dir: str = None, model_dir: str = None) -> Dict[str, Any]:
+def load_config(config_path: str, project_dir: str = None, model_dir: str = None, vae_path: str = None) -> Dict[str, Any]:
     """
     Load configuration from a YAML file and set default values if not present.
 
@@ -62,6 +62,7 @@ def load_config(config_path: str, project_dir: str = None, model_dir: str = None
         config_path: Path to the YAML configuration file.
         project_dir (optional): Path to the project directory, overrides the value in the config file. Defaults to None.
         model_dir (optional): Path to the model directory, overrides the value in the config file. Defaults to None.
+        vae_path (optional): Path to the VAE model file, overrides the value in the config file. Defaults to None.
 
     Returns:
         A dictionary containing the configuration values.
@@ -77,6 +78,7 @@ def load_config(config_path: str, project_dir: str = None, model_dir: str = None
 
     if project_dir is not None: config['directory']['project'] = project_dir
     if model_dir is not None: config['directory']['model'] = model_dir
+    if vae_path is not None: config['directory']['vae'] = vae_path
 
     if not Path(config['directory']['project']).exists():
         raise FileNotFoundError(f'Project directory not found: {config["directory"]["project"]}')

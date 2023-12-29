@@ -1,31 +1,19 @@
 import cv2
 import time
 import numpy as np
+import seaborn as sns
 from collections import defaultdict
 from queue import Queue
 from pathlib import Path
 from threading import Thread
-from matplotlib.pyplot import get_cmap
 from typing import List, Dict, Union, Tuple
 
 
 def get_color_list(cmap_name: str, number: int, cvtInt: bool = True) -> List[Tuple]:
-    """Gets a list of colors from a colormap.
-    
-    Args:
-        cmap_name: The name of the colormap.
-        number: The number of colors to get.
-        cvtInt: Whether to convert the color values to integers. Defaults to True.
-        
-    Returns:
-        A list of RGB color tuples.
-    """
-    cmap = get_cmap(cmap_name)
+    cols = sns.color_palette(cmap_name, number)
     if cvtInt:
-        return [tuple(int(c) for c in cmap(i % len(cmap.colors), bytes=True)[:3]) for i in range(number)]
-    else:
-        return [tuple(cmap(i % len(cmap.colors), bytes=False)[:3]) for i in range(number)]
-
+        cols = [tuple(int(c*255) for c in col) for col in cols]
+    return cols
 
 def get_video_params(video_path: Path) -> Dict[str, Union[int, float]]:
     cap = VideoStreamThread(str(video_path))
@@ -126,10 +114,11 @@ class Timer:
         events: A dictionary to store the timing records for each event.
         tik: The timestamp of the latest recorded time.
     """
-    def __init__(self):
+    def __init__(self, output_path=None):
         """Initializes the Timer instance."""
         self.events = defaultdict(list)
         self.tik = 0.0
+        self.output_path = output_path
 
     def start(self) -> 'Timer':
         """Starts the timer.
@@ -173,3 +162,6 @@ class Timer:
             total += m
         print(f'Total: {round(total, 5)}')
         print('\n')
+
+        if self.output_path is not None:
+            np.savez(self.output_path, **self.events)

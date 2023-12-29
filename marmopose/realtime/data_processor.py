@@ -9,9 +9,19 @@ mlab.options.offscreen = True
 from marmopose.utils.helpers import get_color_list, Timer, VideoStreamThread
 from marmopose.processing.triangulation import reconstruct_3d_coordinates
 from marmopose.processing.optimization import optimize_coordinates
+from marmopose.processing.autoencoder import VariationalAutoencoder
 from marmopose.visualization.display_3d import initialize_3d, get_image_3d
 from marmopose.visualization.display_combined import combine_images
 from marmopose.realtime.predictor import RealtimeSingleInstancePredictor, RealtimeMultiInstacePredictor
+
+
+def fill_with_vae(vae, points_3d: np.ndarray) -> np.ndarray:
+    filled_points_3d = points_3d.copy()
+    mask_invalid = np.isnan(points_3d)
+    res = vae.predict(points_3d)
+    filled_points_3d[mask_invalid] = res[mask_invalid]
+
+    return filled_points_3d
 
 
 class PredictProcess(Process):
@@ -53,19 +63,24 @@ class PredictProcess(Process):
         else:
             self.predictor = RealtimeMultiInstacePredictor(self.config, n_cams=self.n_cams, crop_size=self.crop_size)
 
-        self.camera_threads = [VideoStreamThread(str(path), simulate_live=True, verbose=True) for path in self.camera_paths]
+        self.vae = VariationalAutoencoder(input_dim=(48,), hidden_dim=128, latent_dim=40, batch_size=1, bodyparts=self.config['animal']['bodyparts'])
+        self.vae.autoencoder.load_weights(self.config['directory']['vae'])
+
+        self.camera_threads = [VideoStreamThread(str(path), simulate_live=False, verbose=True) for path in self.camera_paths]
         for camera_thread in self.camera_threads:
             camera_thread.start()
         width, height = self.camera_threads[0].get_param('width'), self.camera_threads[0].get_param('height')
 
-        timer = Timer().start()
+        timer = Timer(output_path=f'./latency/{self.crop_size}.npz').start()
         while not self.stop_event.is_set():
-            # if self.verbose: print(f'Cached frames: {[cam.get_qsize() for cam in self.camera_threads]} | points_2d: {self.points_2d_queue.qsize()} | points_3d: {self.points_3d_queue.qsize()} | images_2d: {self.images_2d_queue.qsize()}')
+            if self.verbose: print(f'Cached frames: {[cam.get_qsize() for cam in self.camera_threads]} | points_2d: {self.points_2d_queue.qsize()} | points_3d: {self.points_3d_queue.qsize()} | images_2d: {self.images_2d_queue.qsize()}')
             images = self.get_latest_frames()
             timer.record('Read')
 
             # Image sclae effect the running speed most significantly rather than the model size.!!!!!!!!
             all_points_with_score_2d = self.predictor.predict(images)
+            # all_points_with_score_2d = np.random.rand(self.n_cams, self.n_tracks, len(self.config['animal']['bodyparts']), 3)
+            
             self.points_2d_queue.put(all_points_with_score_2d)
             timer.record('Predict')
 
@@ -122,12 +137,13 @@ class PredictProcess(Process):
             
             points_3d = reconstruct_3d_coordinates(points_with_score_2d, self.camera_group, verbose=False)
             if self.config['optimization']['enable']:
-                previous_points_3d = self.points_3d_cache[-1][track_idx] if len(self.points_3d_cache) > 0 else None
-                if previous_points_3d is not None:
-                    points_3d_concat = np.concatenate((previous_points_3d, points_3d), axis=0)
-                    points_with_score_2d_concat = np.concatenate((points_with_score_2d, points_with_score_2d), axis=1)
-                    points_3d_concat_processed = optimize_coordinates(self.config, self.camera_group, points_3d_concat, points_with_score_2d_concat, -1, verbose=False)
-                    points_3d = points_3d_concat_processed[-1:]
+                points_3d = fill_with_vae(self.vae, points_3d)
+                # previous_points_3d = self.points_3d_cache[-1][track_idx] if len(self.points_3d_cache) > 0 else None
+                # if previous_points_3d is not None:
+                #     points_3d_concat = np.concatenate((previous_points_3d, points_3d), axis=0)
+                #     points_with_score_2d_concat = np.concatenate((points_with_score_2d, points_with_score_2d), axis=1)
+                #     points_3d_concat_processed = optimize_coordinates(self.config, self.camera_group, points_3d_concat, points_with_score_2d_concat, -1, verbose=False)
+                #     points_3d = points_3d_concat_processed[-1:]
 
             all_points_3d.append(points_3d)
 
