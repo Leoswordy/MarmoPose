@@ -1,11 +1,12 @@
 directory:
-  project: 'D:\ccq\MarmoSync\demos\single_30s'
-  model: 'D:\ccq\MarmoSync\data\models\single_v1.5'
-  vae: 'D:\ccq\MarmoSync\data\models\VAE_v1.h5'
+  project: '/Users/leosword/Documents/MarmoSync/demos/family_latest'
+  model: ['/Users/leosword/Documents/MarmoSync/data/models/centroid_v1.9', 
+          '/Users/leosword/Documents/MarmoSync/data/models/id_centered_instance_v2.4']
+  vae: '/Users/leosword/Documents/MarmoSync/data/models/VAE_v1.h5'
   
 
 animal:
-  number: 1
+  number: 4
   bodyparts: ['head', 'leftear', 'rightear', 'neck', 
               'leftelbow', 'rightelbow', 'lefthand', 'righthand', 
               'spinemid', 'tailbase', 'leftknee', 'rightknee', 
@@ -29,18 +30,18 @@ visualization:
 
 filter:
   threshold: 0.2
-
   
+
 triangulation:
   user_define_axes: true
 
 
 optimization:
-  enable: true
-  n_deriv_smooth: 1
+  enable: enable
+  n_deriv_smooth: 2
   scale_smooth: 2
-  scale_length: 0
-  scale_length_weak: 0
+  scale_length: 5
+  scale_length_weak: 1
 
   bodypart_distance:
     'head - rightear': 21.0 # mm
@@ -61,4 +62,3 @@ optimization:
     'tailmid - tailend': 103.0
     'rightknee - rightfoot': 42.0
     'leftknee - leftfoot': 42.0
-

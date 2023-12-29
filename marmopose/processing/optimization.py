@@ -6,7 +6,18 @@ from typing import Dict, Any, List, Tuple
 from marmopose.processing.filter import interpolate_data
 from marmopose.calibration.cameras import CameraGroup
 from marmopose.utils.helpers import Timer
+from marmopose.processing.autoencoder import VariationalAutoencoder
 
+
+def fill_with_vae(VAE: VariationalAutoencoder, points_3d: np.ndarray) -> np.ndarray:
+    filled_points_3d = points_3d.copy()
+
+    mask_invalid = np.isnan(points_3d)
+    res = VAE.predict(points_3d)
+    filled_points_3d[mask_invalid] = res[mask_invalid]
+
+    return filled_points_3d
+    
 
 def optimize_coordinates(config: Dict[str, Any],
                          camera_group: CameraGroup,
@@ -39,9 +50,16 @@ def optimize_coordinates(config: Dict[str, Any],
 
     bodypart_dist = parse_constraints(config, 'bodypart_distance')
     bodypart_dist_weak = parse_constraints(config, 'bodypart_distance_weak')
+    bodyparts = config['animal']['bodyparts']
     
-    points_3d_interp = np.apply_along_axis(interpolate_data, 0, points_3d)
+    # TODO: Optimize prior using autoencoder
+    VAE = VariationalAutoencoder(input_dim=(48,), hidden_dim=128, latent_dim=40, bodyparts=bodyparts, skeleton_constraints=bodypart_dist)
+    VAE.autoencoder.load_weights(config['directory']['vae'])
+    points_3d_prior = fill_with_vae(VAE, points_3d)
+    points_3d_interp = np.apply_along_axis(interpolate_data, 0, points_3d_prior)
+
     points_3d_original, points_3d_unprocessed = points_3d_interp[:start_frame], points_3d_interp[start_frame:]
+    # mask_valid = ~np.isnan(points_3d[start_frame:, :, :])
     points_with_score_2d_unprocessed = points_with_score_2d[:, start_frame:]
     initial_params = points_3d_unprocessed.ravel()
     if verbose: print(f'Optimizing {points_3d_unprocessed.shape[0]} frames, {initial_params.shape[0]} parameters in total')
@@ -53,7 +71,7 @@ def optimize_coordinates(config: Dict[str, Any],
                                     method='trf',
                                     loss='linear',
                                     ftol = 1e-2,
-                                    max_nfev = 3,
+                                    max_nfev = 7,
                                     jac_sparsity=jac_sparsity,
                                     verbose=2*verbose, 
                                     args=(camera_group,
@@ -65,6 +83,7 @@ def optimize_coordinates(config: Dict[str, Any],
                                           bodypart_dist,
                                           bodypart_dist_weak))
     points_3d_optimized = result.x.reshape(points_3d_unprocessed.shape)
+    # points_3d_optimized[mask_valid] = points_3d[start_frame:, :, :][mask_valid]
     residuals = result.fun
     if verbose: print(f'Optimization finished mean residual: {np.mean(residuals):.2f}')
     timer.record('optimize')

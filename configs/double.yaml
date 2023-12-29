@@ -1,7 +1,8 @@
 directory:
-  project: '/Users/leosword/Documents/MarmoSync/demos/double_8s_test'
-  model: ['/Users/leosword/Documents/MarmoSync/data/models/centroid_v1.2', 
-          '/Users/leosword/Documents/MarmoSync/data/models/id_centered_instance_v2.1']
+  project: '/Users/leosword/Documents/MarmoSync/demos/double_40s_1stick'
+  model: ['/Users/leosword/Documents/MarmoSync/data/models/centroid_v1.9', 
+          '/Users/leosword/Documents/MarmoSync/data/models/id_centered_instance_v2.4']
+  vae: '/Users/leosword/Documents/MarmoSync/data/models/VAE_v1.h5'
   
 
 animal:
@@ -21,10 +22,10 @@ calibration:
 visualization:
   skeleton:
     - ['head', 'leftear', 'neck', 'rightear', 'head']
-    - ['neck', 'spinemid', 'tailbase']
-    - ['leftfoot', 'leftknee', 'tailbase', 'rightknee', 'rightfoot']
-    - ['lefthand', 'leftelbow', 'neck', 'rightelbow', 'righthand']
     - ['tailbase', 'tailmid', 'tailend']
+    - ['neck', 'spinemid', 'tailbase']
+    - ['lefthand', 'leftelbow', 'neck', 'rightelbow', 'righthand']
+    - ['leftfoot', 'leftknee', 'tailbase', 'rightknee', 'rightfoot']
 
 
 filter:
@@ -38,27 +39,26 @@ triangulation:
 optimization:
   enable: true
   n_deriv_smooth: 1
-  scale_smooth: 1
-  scale_length: 2
-  scale_length_weak: 1
+  scale_smooth: 2
+  scale_length: 0
+  scale_length_weak: 0
 
   bodypart_distance:
-    'head - rightear': 30.0 # mm
-    'head - leftear': 30.0
-    'rightear - neck': 40.0
-    'leftear - neck': 40.0
-    'neck - spinemid': 80.0
-    'spinemid - tailbase': 80.0
-    'neck - rightelbow': 70.0
-    'rightelbow - righthand': 70.0
-    'neck - leftelbow': 70.0
-    'leftelbow - lefthand': 70.0
-    'tailbase - rightknee': 70.0
-    'tailbase - leftknee': 70.0
+    'head - rightear': 21.0 # mm
+    'head - leftear': 21.0
+    'rightear - neck': 52.0
+    'leftear - neck': 52.0
+    'neck - spinemid': 58.0
+    'spinemid - tailbase': 73.0
+    'neck - rightelbow': 73.0
+    'rightelbow - righthand': 54.0
+    'neck - leftelbow': 73.0
+    'leftelbow - lefthand': 54.0
+    'tailbase - rightknee': 90.0
+    'tailbase - leftknee': 90.0
 
   bodypart_distance_weak:
-    'tailbase - tailmid': 140.0
-    'tailmid - tailend': 140.0
-    'rightknee - rightfoot': 80.0
-    'leftknee - leftfoot': 80.0
-
+    'tailbase - tailmid': 103.0
+    'tailmid - tailend': 103.0
+    'rightknee - rightfoot': 42.0
+    'leftknee - leftfoot': 42.0

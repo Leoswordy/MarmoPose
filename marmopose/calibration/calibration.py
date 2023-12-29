@@ -38,10 +38,10 @@ def calibrate(config: Dict[str, Any], verbose: bool = True) -> None:
 
         cgroup.calibrate_rows(all_rows, board, 
                               init_intrinsics=True, init_extrinsics=True, 
-                              n_iters=20, start_mu=15, end_mu=1, 
+                              n_iters=10, start_mu=15, end_mu=1, 
                               max_nfev=200, ftol=1e-4, 
                               n_samp_iter=200, n_samp_full=1000, 
-                              error_threshold=1, verbose=verbose)
+                              error_threshold=2.5, verbose=verbose)
     else:
         if verbose: print(f'Calibration result already exists in: {output_path}')
         cgroup = CameraGroup.load_from_json(str(output_path))
@@ -121,6 +121,7 @@ def update_camera_parameters(camera, T):
 def construct_transformation_matrix(camera_group, axes):
     offset = np.array(axes['offset'])
     axes_2d = np.array([axes[cam_name] for cam_name in camera_group.get_names()], dtype=np.float32)
+    # TODO: Triangulate from a subset of cameras
     axes_3d = camera_group.triangulate(axes_2d, undistort=True, verbose=False) - offset
 
     new_x_axis = axes_3d[1] - axes_3d[0]

@@ -68,7 +68,9 @@ def set_coordinates(config: Dict[str, Any], obj_name: str, offset: Tuple[float, 
     video_paths = sorted(videos_raw_dir.glob(f"*.{config['video_extension']}"))
 
     coordinates_dict = {'offset': offset}
-    for video_path in video_paths:
+    for i, video_path in enumerate(video_paths):
+        if i not in [0, 2]:
+            continue
         cam_name = video_path.stem
         cap = cv2.VideoCapture(str(video_path))
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)

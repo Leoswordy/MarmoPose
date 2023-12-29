@@ -98,8 +98,8 @@ def combine_images(images_2d: np.ndarray, image_3d: np.ndarray, scale: float = 1
     image_combined[new_height//4:7*new_height//4, new_width*3//4:new_width*9//4] = image_3d
 
     for i in range(len(images_2d)):
-        # r, c = i // 2, i % 2
-        r, c = (i+1) % 2, i // 2
+        r, c = i // 2, i % 2
+        # r, c = (i+1) % 2, i // 2
         image_combined[r*new_height:(r+1)*new_height, c*(2*new_width):new_width+c*(2*new_width)] = images_2d[i]
 
     return image_combined

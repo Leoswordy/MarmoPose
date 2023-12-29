@@ -79,7 +79,7 @@ def initialize_3d(n_tracks: int, n_bodyparts: int, skeleton_indices: List[List[i
                   track_color_list: List[Tuple[float, float, float]], 
                   skeleton_color_list: List[Tuple[float, float, float]], 
                   axes: np.ndarray = None, scale: float = 1.0, 
-                  room_dimensions: List[int] = [680, 980, 780, 30]) -> Tuple[mlab.figure, List[mlab.points3d], List[mlab.plot3d]]:
+                  room_dimensions: List[int] = [730, 1030, 860, 30]) -> Tuple[mlab.figure, List[mlab.points3d], List[mlab.plot3d]]:
     """
     Initialize the 3D figure and return it along with the points and lines.
     
@@ -102,6 +102,7 @@ def initialize_3d(n_tracks: int, n_bodyparts: int, skeleton_indices: List[List[i
 
     # TODO: How to define room dimensions?****************************************************************
     # Draw room with grids
+    # mlab.view(135, 120)
     draw_room_grids(*room_dimensions)
 
     # Draw axes
