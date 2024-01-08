@@ -21,6 +21,7 @@ def predict(config: Dict[str, Any], batch_size: int = 4, verbose: bool = True) -
     """
     model_dir = config['directory']['model']
     project_dir = Path(config['directory']['project'])
+    n_tracks = config['animal']['number']
     videos_raw_dir = project_dir / config['directory']['videos_raw']
     points_2d_path = project_dir / config['directory']['points_2d'] / 'original.h5'
     points_2d_path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,7 +32,7 @@ def predict(config: Dict[str, Any], batch_size: int = 4, verbose: bool = True) -
     
     # Predict 2D points for each video and save to an HDF5 file
     for video_path in video_paths:
-        points_with_score_2d, points_with_score_2d_filtered = predict_points_2d(video_path, model_dir, batch_size, verbose)
+        points_with_score_2d, points_with_score_2d_filtered = predict_points_2d(video_path, n_tracks, model_dir, batch_size, verbose)
         save_points_2d_h5(points=points_with_score_2d,
                           name=video_path.stem, 
                           file_path=points_2d_path, 
@@ -43,7 +44,7 @@ def predict(config: Dict[str, Any], batch_size: int = 4, verbose: bool = True) -
                           verbose=verbose)
 
 
-def predict_points_2d(video_path: Path, model_dir: str, batch_size: int = 4 , verbose: bool = True) -> np.ndarray:
+def predict_points_2d(video_path: Path, n_tracks: int, model_dir: str, batch_size: int = 4 , verbose: bool = True) -> np.ndarray:
     """
     Predicts 2D points for a given video using a trained model.
 
@@ -73,8 +74,7 @@ def predict_points_2d(video_path: Path, model_dir: str, batch_size: int = 4 , ve
         labels = predictor.predict(video)
         labels.save(slp_path, with_images=False, embed_all_labeled=False)
     
-    points_with_score_2d = labels.numpy(untracked=False, return_confidence=True) #(n_frames, n_tracks, n_bodyparts, 3)
-    points_with_score_2d = np.swapaxes(points_with_score_2d, 0, 1) #(n_tracks, n_frames, n_bodyparts, 3)
+    points_with_score_2d = get_arr_from_labels(labels, n_tracks)
 
     # Tracking
     print(f'Tracking {slp_path}')
@@ -88,11 +88,36 @@ def predict_points_2d(video_path: Path, model_dir: str, batch_size: int = 4 , ve
     # TODO: Optimize tracking and filter?
     # tracked_labels.save(video_path.with_name(f"{video_path.stem + '_tracked'}.slp"))
 
-    points_with_score_2d_filtered = tracked_labels.numpy(untracked=False, return_confidence=True) #(n_frames, n_tracks, n_bodyparts, 3)
-    points_with_score_2d_filtered = np.swapaxes(points_with_score_2d_filtered, 0, 1) #(n_tracks, n_frames, n_bodyparts, 3)
-    # points_with_score_2d_filtered = filter_data(points_with_score_2d_filtered)
+    points_with_score_2d_filtered = get_arr_from_labels(tracked_labels, n_tracks)
 
     return points_with_score_2d, points_with_score_2d_filtered
+
+
+def get_arr_from_labels(labels: sleap.Labels, n_tracks: int):
+    """
+    Get numpy array from sleap labels.
+
+    Args:
+        labels: sleap Labels object
+        n_tracks: number of instances
+    
+    Return:
+        Array of predicted 2D points with confidence scores. 
+            - Shape: (n_tracks, n_frames, n_bodyparts, 3)
+            - Final channel: (x, y, score)
+    """
+    points_with_score_2d = labels.numpy(untracked=False, return_confidence=True) #(n_frames, n_tracks, n_bodyparts, 3)
+    points_with_score_2d = np.swapaxes(points_with_score_2d, 0, 1) #(n_tracks, n_frames, n_bodyparts, 3)
+    _, n_frames, n_bodyparts, _ = points_with_score_2d.shape
+
+    if len(labels.tracks) < n_tracks:
+        padded_points = np.full((n_tracks, n_frames, n_bodyparts, 3), np.nan, dtype="float32")
+        for points, track in zip(points_with_score_2d, labels.tracks):
+            track_idx = int(track.name)
+            padded_points[track_idx] = points
+        return padded_points
+    
+    return points_with_score_2d
 
 
 class IDTracker(Tracker):
