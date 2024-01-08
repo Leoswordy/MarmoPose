@@ -11,11 +11,11 @@ A complete multi-marmoset 3D pose tracking system.
 
 ## Getting Started
 ### Installation
-1. Install SLEAP from https://sleap.ai/installation.html
-2. pip install mayavi ffmpeg tqdm
+1. Create python environment and install SLEAP based on https://sleap.ai/installation.html
+2. ```pip install mayavi ffmpeg tqdm```
 
 ## Usage
-- Train new models, or download models from ？
-- run.py: offline process
-- run_realtime.py: real-time process
-- specify project and model directory, then follow the comments
+- Train new models, or download models from https://cloud.tsinghua.edu.cn/d/74adaa2da1a848d6b984
+- **run.py**: offline process
+- **run_realtime.py**: real-time process
+- Specify project and model directory, then follow the comments
