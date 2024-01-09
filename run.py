@@ -24,7 +24,7 @@ if __name__ == '__main__':
                          vae_path='D:\ccq\MarmoSync\data\models\VAE_v1.h5')
 
     # Define customized coordinates
-    # set_coordinates(config, obj_name='axes', offset=(0, 0, 0), frame_idx=100)
+    # set_coordinates(config, video_inds = [1, 3], obj_name='axes', offset=(0, 0, 0), frame_idx=100)
 
     # Camera calibration
     # calibrate(config, verbose=True)

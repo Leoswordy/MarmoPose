@@ -120,9 +120,11 @@ def update_camera_parameters(camera, T):
 
 def construct_transformation_matrix(camera_group, axes):
     offset = np.array(axes['offset'])
-    axes_2d = np.array([axes[cam_name] for cam_name in camera_group.get_names()], dtype=np.float32)
-    # TODO: Triangulate from a subset of cameras
-    axes_3d = camera_group.triangulate(axes_2d, undistort=True, verbose=False) - offset
+    cam_names = [key for key in axes.keys() if key != 'offset']
+    axes_2d = np.array([axes[cam_name] for cam_name in cam_names], dtype=np.float32)
+    
+    sub_camera_group = camera_group.subset_cameras_names(cam_names)
+    axes_3d = sub_camera_group.triangulate(axes_2d, undistort=True, verbose=False) - offset
 
     new_x_axis = axes_3d[1] - axes_3d[0]
     new_y_axis = orthogonalize_vector(axes_3d[2] - axes_3d[0], new_x_axis)

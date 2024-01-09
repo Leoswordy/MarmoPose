@@ -51,12 +51,13 @@ def capture_coordinates(cap: cv2.VideoCapture, cam_name: str) -> List[Tuple[int,
     return cam_coords
 
 
-def set_coordinates(config: Dict[str, Any], obj_name: str, offset: Tuple[float, float, float], frame_idx: int = 0) -> None:
+def set_coordinates(config: Dict[str, Any], video_inds: List, obj_name: str, offset: Tuple[float, float, float], frame_idx: int = 0) -> None:
     """
     Set coordinates for each camera by capturing from video frames.
 
     Args:
         config: Configuration dictionary containing project settings.
+        video_inds: The index of videos for setting coordinates.
         obj_name: Name of the object for which coordinates are being set.
         offset: 3D Offset values (x, y, z).
         frame_idx: Frame index from which to capture the coordinates. Defaults to 0.
@@ -69,7 +70,7 @@ def set_coordinates(config: Dict[str, Any], obj_name: str, offset: Tuple[float, 
 
     coordinates_dict = {'offset': offset}
     for i, video_path in enumerate(video_paths):
-        if i not in [0, 2]:
+        if i+1 not in video_inds:
             continue
         cam_name = video_path.stem
         cap = cv2.VideoCapture(str(video_path))

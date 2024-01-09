@@ -110,7 +110,7 @@ def get_arr_from_labels(labels: sleap.Labels, n_tracks: int):
     points_with_score_2d = np.swapaxes(points_with_score_2d, 0, 1) #(n_tracks, n_frames, n_bodyparts, 3)
     _, n_frames, n_bodyparts, _ = points_with_score_2d.shape
 
-    if len(labels.tracks) < n_tracks:
+    if n_tracks > 1 and len(labels.tracks) < n_tracks:
         padded_points = np.full((n_tracks, n_frames, n_bodyparts, 3), np.nan, dtype="float32")
         for points, track in zip(points_with_score_2d, labels.tracks):
             track_idx = int(track.name)
