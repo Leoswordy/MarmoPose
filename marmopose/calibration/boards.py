@@ -1,8 +1,9 @@
+from abc import ABC, abstractmethod
+from collections import defaultdict
+
 import cv2
 import numpy as np
-from abc import ABC, abstractmethod
 from tqdm import trange
-from collections import defaultdict
 
 
 def merge_rows(all_rows, cam_names=None):

@@ -1,17 +1,19 @@
-import cv2
 import json
 import queue
+from collections import Counter, defaultdict
+from itertools import combinations
+from typing import Any, Dict, List, Tuple
+
+import cv2
 import numpy as np
-from tqdm import trange
 from pprint import pprint
+from tqdm import trange
 from scipy import optimize
-from scipy.sparse import dok_matrix
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.cluster.vq import whiten
-from collections import defaultdict, Counter
-from typing import List, Tuple, Dict, Any
+from scipy.sparse import dok_matrix
 
-from marmopose.calibration.boards import merge_rows, extract_points, extract_rtvecs
+from marmopose.calibration.boards import extract_points, extract_rtvecs, merge_rows
 from marmopose.utils.helpers import get_video_params
 
 
@@ -386,17 +388,52 @@ class CameraGroup:
                 size = (params['width'], params['height'])
                 cam.set_size(size)
     
-    def triangulate(self, points_2d_flat: np.ndarray, undistort: bool = True, verbose: bool = False) -> np.ndarray:
+    def triangulate_filtered(self, points, score) -> np.ndarray:
+        """
+        points: 2D points of shape (n_cameras, 2)
+        score: Confidence score of the 2D points, shape (n_cameras,)
+        """
+        valid_idx = [i for i, pt in enumerate(points) if not np.any(np.isnan(pt))]
+
+        points = points[valid_idx]
+        camera_mats = [self.cameras[i].get_extrinsic_matrix() for i in valid_idx]
+
+        min_error = np.inf
+        best_3d_point = np.full(3, np.nan)
+
+        for r in range(2, len(points)+1):
+            for cam_indices in combinations(range(len(camera_mats)), r):
+                cam_mats_subset = [camera_mats[i] for i in cam_indices]
+                points_subset = [points[i] for i in cam_indices]
+
+                p3d = triangulate_SVD(points_subset, cam_mats_subset)
+
+                # Reproject and calculate errors for all cameras
+                p3d_repeated = p3d[np.newaxis, :] # (1, 3)
+                errors = self.reprojection_error(p3d_repeated, np.array(points)[:, np.newaxis, :], valid_idx, mean=True)
+
+                # Check if the current configuration gives a better (lower) reprojection error
+                if np.all(errors < np.inf) and errors < min_error: # TODO: adjust threshold
+                    min_error = errors
+                    best_3d_point = p3d
+
+        return best_3d_point
+        
+    def triangulate(self, points_with_score_2d_flat: np.ndarray, undistort: bool = True, verbose: bool = True) -> np.ndarray:
         """Triangulate 3D points from 2D points using camera extrinsic matrices.
 
         Args:
-            points_2d_flat: 2D points of shape (n_cameras, n_points, 2).
+            points_with_score_2d_flat: 2D points of shape (n_cameras, n_points, 3).
             undistort (optional): Whether to undistort the 2D points using camera intrinsic matrices. Defaults to True.
-            verbose (optional): Whether to display a progress bar. Defaults to False.
 
         Returns:
             3D points of shape (n_points, 3).
         """
+        if points_with_score_2d_flat.shape[-1] == 3:
+            points_2d_flat, scores_2d = points_with_score_2d_flat[..., :2], points_with_score_2d_flat[..., 2]
+        else:
+            points_2d_flat, scores_2d = points_with_score_2d_flat, np.ones(points_with_score_2d_flat.shape[:-1])
+            
         if undistort:
             points_2d_flat = np.array([cam.undistort_points(np.copy(pt)) for pt, cam in zip(points_2d_flat, self.cameras)])
         cam_mats = np.array([cam.get_extrinsic_matrix() for cam in self.cameras])
@@ -404,12 +441,16 @@ class CameraGroup:
         n_points = points_2d_flat.shape[1]
         points_3d_flat = np.full((n_points, 3), np.nan)
 
-        iterator = trange(n_points, ncols=100, desc='Triangulating... ', unit='points') if verbose else range(n_points)
-        for pt_idx in iterator:
+        progress_bar = trange(n_points, ncols=100, desc='Triangulating... ', unit='points') if verbose else range(n_points)
+        for pt_idx in progress_bar:
             sub_points = points_2d_flat[:, pt_idx, :]
+            sub_scores = scores_2d[:, pt_idx]
             valid_points = ~np.isnan(sub_points[:, 0])
             if np.sum(valid_points) >= 2:
                 points_3d_flat[pt_idx] = triangulate_SVD(sub_points[valid_points], cam_mats[valid_points])
+                
+                # TODO: Exclude bbox and points with low confidence first 
+                # points_3d_flat[pt_idx] = self.triangulate_filtered(sub_points, sub_scores)
 
         return points_3d_flat
     

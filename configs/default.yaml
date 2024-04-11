@@ -1,11 +1,12 @@
 directory:
-  project: 'D:\ccq\MarmoSync\demos\single_30s'
-  model: 'D:\ccq\MarmoSync\data\models\single_v1.5'
-  vae: 'D:\ccq\MarmoSync\data\models\VAE_v1.h5'
-  
+  project: 'demos/pair'
+  det_model: 'models/detection_model'
+  pose_model: 'models/pose_model'
+  dae_model: 'models/dae_model'
+
 
 animal:
-  number: 1
+  n_tracks: 2
   bodyparts: ['head', 'leftear', 'rightear', 'neck', 
               'leftelbow', 'rightelbow', 'lefthand', 'righthand', 
               'spinemid', 'tailbase', 'leftknee', 'rightknee', 
@@ -19,6 +20,8 @@ calibration:
 
 
 visualization:
+  track_cmap: 'Set2'
+  skeleton_cmap: 'hls'
   skeleton:
     - ['head', 'leftear', 'neck', 'rightear', 'head']
     - ['tailbase', 'tailmid', 'tailend']
@@ -27,20 +30,23 @@ visualization:
     - ['leftfoot', 'leftknee', 'tailbase', 'rightknee', 'rightfoot']
 
 
-filter:
-  threshold: 0.2
-
+threshold:
+  bbox: 0.2
+  iou: 0.8
+  keypoint: 0.5
   
+
 triangulation:
   user_define_axes: true
+  dae_enable: true
 
 
 optimization:
-  enable: true
+  do_optimize: false
   n_deriv_smooth: 1
   scale_smooth: 2
-  scale_length: 0
-  scale_length_weak: 0
+  scale_length: 2
+  scale_length_weak: 1
 
   bodypart_distance:
     'head - rightear': 21.0 # mm
@@ -61,4 +67,3 @@ optimization:
     'tailmid - tailend': 103.0
     'rightknee - rightfoot': 42.0
     'leftknee - leftfoot': 42.0
-
