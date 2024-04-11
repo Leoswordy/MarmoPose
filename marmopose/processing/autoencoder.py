@@ -1,79 +1,83 @@
 import time
+import logging
 import itertools
-import numpy as np
-import time
 
-import tensorflow as tf
-from keras import backend as K
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset, random_split
 
 from marmopose.utils.helpers import orthogonalize_vector
 
+logger = logging.getLogger(__name__)
 
-class VariationalAutoencoder:
-    def __init__(self, input_dim, hidden_dim=64, latent_dim=20, batch_size=4096,
-                 bodyparts=None, skeleton_constraints=None):
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.latent_dim = latent_dim
+
+class DaeEncoder(nn.Module):
+    def __init__(self, input_dim, hidden_dim, latent_dim):
+        super().__init__()
+        intermediate_dim = hidden_dim * 2
+
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, intermediate_dim)
+        self.fc31 = nn.Linear(intermediate_dim, latent_dim)  # z_mean
+        self.fc32 = nn.Linear(intermediate_dim, latent_dim)  # z_log_var
+    
+    def forward(self, x):
+        h = F.relu(self.fc1(x))
+        h = F.relu(self.fc2(h))
+        return self.fc31(h), self.fc32(h) # z_mean, z_log_var
+    
+
+class DaeDecoder(nn.Module):
+    def __init__(self, latent_dim, hidden_dim, output_dim):
+        super().__init__()
+        intermediate_dim = hidden_dim * 2
+
+        self.fc1 = nn.Linear(latent_dim, intermediate_dim)
+        self.fc2 = nn.Linear(intermediate_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, output_dim)
+    
+    def forward(self, x):
+        h = F.relu(self.fc1(x))
+        h = F.relu(self.fc2(h))
+        return self.fc3(h)
+
+
+class DenoisingAutoencoder(nn.Module):
+    def __init__ (self, input_dim, hidden_dim=64, latent_dim=20):
+        super().__init__()
+
+        self.encoder = DaeEncoder(input_dim, hidden_dim, latent_dim)
+        self.decoder = DaeDecoder(latent_dim, hidden_dim, input_dim)
+    
+    def reparameterize(self, z_mean, z_log_var):
+        std = torch.exp(0.5*z_log_var)
+        eps = torch.randn_like(std)
+        return z_mean + eps*std
+    
+    def forward(self, x):
+        z_mean, z_log_var = self.encoder(x)
+        z = self.reparameterize(z_mean, z_log_var)
+        return self.decoder(z), z_mean, z_log_var
+
+
+class DaeTrainer:
+    def __init__(self, model, batch_size=4096, bodyparts=None, skeleton_constraints=None):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        logger.info(f"DAE device: {self.device}")
+    
+        self.model = model.to(self.device)
         self.batch_size = batch_size
-
-        self.encoder = self.build_encoder()
-        self.decoder = self.build_decoder()
-        self.autoencoder = self.build_autoencoder()
 
         self.poseprocessor = PoseProcessor(bodyparts=bodyparts, original_point='spinemid', x_point='neck', xz_point='tailbase', scale_length=6)
         self.skeleton_constraints = skeleton_constraints
-
-    def build_encoder(self):
-        inputs = tf.keras.layers.Input(shape=self.input_dim, name='encoder_input')
-        x = tf.keras.layers.Dense(self.hidden_dim, activation='relu')(inputs)
-        x = tf.keras.layers.Dense(self.hidden_dim*2, activation='relu')(x)
-        z_mean = tf.keras.layers.Dense(self.latent_dim, name='z_mean')(x)
-        z_log_var = tf.keras.layers.Dense(self.latent_dim, name='z_log_var')(x)
-        z = tf.keras.layers.Lambda(self.sampling, output_shape=(self.latent_dim,), name='z')([z_mean, z_log_var])
-        
-        return tf.keras.models.Model(inputs, [z_mean, z_log_var, z], name='encoder')
-
-    def build_decoder(self):
-        latent_inputs = tf.keras.layers.Input(shape=(self.latent_dim,), name='z_sampling')
-        x = tf.keras.layers.Dense(self.hidden_dim*2, activation='relu')(latent_inputs)
-        x = tf.keras.layers.Dense(self.hidden_dim, activation='relu')(x)
-        outputs = tf.keras.layers.Dense(self.input_dim[0], activation='linear')(x)
-
-        return tf.keras.models.Model(latent_inputs, outputs, name='decoder')
-
-    def build_autoencoder(self):
-        inputs = tf.keras.layers.Input(shape=self.input_dim, name='autoencoder_input')
-        z_mean, z_log_var, z = self.encoder(inputs)
-        outputs = self.decoder(z)
-        autoencoder = tf.keras.models.Model(inputs, [outputs, z_mean, z_log_var], name='vae')
-
-        return autoencoder
-
-    def sampling(self, args):
-        z_mean, z_log_var = args
-        batch = K.shape(z_mean)[0]
-        dim = K.int_shape(z_mean)[1]
-        epsilon = K.random_normal(shape=(batch, dim))
-        return z_mean + K.exp(0.5 * z_log_var) * epsilon
-
-    def compute_kl_loss(self, z_mean, z_log_var):
-        kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
-        kl_loss = K.sum(kl_loss, axis=-1)
-        kl_loss *= -0.5
-        return kl_loss
+        self.bodyparts = bodyparts
     
-    def compute_limb_loss(self, y_pred):
-        y_pred = tf.reshape(y_pred, (-1, 16, 3))
+    def mask_data(self, original_data):
+        masked_data, gt_data = self.poseprocessor.generate_masked_data(original_data)
+        return masked_data, gt_data
 
-        errors = []
-        for (bp1, bp2), expected_length in self.skeleton_constraints:
-            actual_lengths = tf.norm(y_pred[:, bp1] - y_pred[:, bp2], axis=1)
-            errors.append(tf.abs(actual_lengths - expected_length/10))
-
-        errors_stacked = tf.stack(errors, axis=0)
-        return tf.reduce_sum(errors_stacked, axis=0)
-    
     def preprocess(self, X, y):
         """
         Args:
@@ -90,135 +94,136 @@ class VariationalAutoencoder:
         X = X.reshape(n_samples, -1)
 
         y = y.reshape(n_samples, -1)
-        return X, y
+        return torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
 
-    def train(self, X_train, y_train, X_val, y_val, epochs=100, lr=0.001, patience=10):
-        self.autoencoder.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr))
+    def build_dataloader(self, original_data, val_ratio=0.1):
+        masked_data, gt_data = self.mask_data(original_data)
+        X, y = self.preprocess(masked_data, gt_data)
 
-        X_train, y_train = self.preprocess(X_train, y_train)
-        X_val, y_val = self.preprocess(X_val, y_val)
+        dataset = TensorDataset(X, y)
 
-        best_val_loss = float('inf')
-        no_improve_epochs = 0
+        train_dataset, val_dataset = random_split(dataset, [1-val_ratio, val_ratio], torch.Generator().manual_seed(42))
+        logger.info(f'Split dataset into {len(train_dataset)} for train and {len(val_dataset)} for val using seed 42')
+
+        self.train_dataloader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+        self.val_dataloader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+    
+    def loss_fn(self, y_pred, y_true, z_mean, z_log_var):
+        mse_loss = F.mse_loss(y_pred, y_true)
+        kl_loss = self.compute_kl_loss(z_mean, z_log_var)
+        limb_loss = self.compute_limb_loss(y_pred)
+
+        total_loss = mse_loss + kl_loss + limb_loss
+        # total_loss = mse_loss + kl_loss
+        return {
+            'total_loss': total_loss,
+            'mse_loss': mse_loss,
+            'kl_loss': kl_loss,
+            'limb_loss': limb_loss
+        }
+
+    @staticmethod
+    def compute_kl_loss(z_mean, z_log_var):
+        kl_loss = 1 + z_log_var - z_mean.pow(2) - z_log_var.exp()
+        kl_loss = torch.sum(kl_loss, dim=-1) * -0.5
+        return kl_loss.mean()
+
+    def compute_limb_loss(self, y_pred):
+        y_pred = y_pred.view(-1, 16, 3)  # Adjust dimensions as necessary
+
+        errors = []
+        for (bp1, bp2), expected_length in self.skeleton_constraints:
+            actual_lengths = torch.norm(y_pred[:, bp1] - y_pred[:, bp2], dim=1)
+            errors.append(torch.abs(actual_lengths - expected_length / 10))
+
+        errors_stacked = torch.stack(errors, dim=0)
+        return torch.sum(errors_stacked, dim=0).mean()
+    
+    def train(self, save_path=None, epochs=100, lr=0.001, patience=10):
+        self.model.train()
+
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        best_val_loss = np.inf
+        patience_counter = 0
 
         for epoch in range(epochs):
             start_time = time.time()
-            p = np.random.permutation(len(X_train))
-            X_train_shuffled, y_train_shuffled = X_train[p], y_train[p]
+            all_losses = {'total_loss': 0, 'mse_loss': 0, 'kl_loss': 0, 'limb_loss': 0}
+            for X_batch, y_batch in self.train_dataloader:
+                step_losses = self.train_step(X_batch, y_batch, optimizer)
+                for k, v in step_losses.items():
+                    all_losses[k] += v
+            
+            num_batches = len(self.train_dataloader)
+            avg_losses = {key: value / num_batches for key, value in all_losses.items()}
+            loss_str = " | ".join([f"{key}: {value:.4f}" for key, value in avg_losses.items()])
+            end_time = time.time()
 
-            training_losses = self.process_batch(X_train_shuffled, y_train_shuffled, training=True)
-            val_losses = self.evaluate(X_val, y_val)
+            logger.info(f"********* Epoch {epoch}/{epochs} *********: Train: {loss_str}, Time: {end_time - start_time:.2f}s")
 
-            print(f'Epoch {epoch + 1}/{epochs} | Time: {time.time() - start_time:.2f}s')
-            print(f'Train - Loss: {training_losses[0]:.3f} - MSE Loss: {training_losses[1]:.3f} - Limb Loss: {training_losses[2]:.3f} - KL Loss: {training_losses[3]:.3f}')
-            print(f'Val - Loss: {val_losses[0]:.3f} - MSE Loss: {val_losses[1]:.3f} - Limb Loss: {val_losses[2]:.3f} - KL Loss: {val_losses[3]:.3f}')
-
-            if val_losses[0] < best_val_loss:
-                best_val_loss = val_losses[0]
-                no_improve_epochs = 0
+            val_loss = self.evaluate(self.val_dataloader)  # Ensure this also uses .to(device)
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                patience_counter = 0
             else:
-                no_improve_epochs += 1
-                if no_improve_epochs >= patience:
-                    print(f'Early stopping. Loss does not decrease for {patience} epochs.')
+                patience_counter += 1
+                if patience_counter >= patience:
+                    logger.info(f"Early stopping at epoch {epoch} with val loss {val_loss:.4f}")
                     break
-
-    def process_batch(self, X, y, training=True):
-        total_loss, total_mse_loss, total_limb_loss, total_kl_loss = 0, 0, 0, 0
-        num_batches = 0
-        for i in range(0, len(X), self.batch_size):
-            X_batch = X[i:i + self.batch_size]
-            y_batch = y[i:i + self.batch_size]
-            num_batches += 1
-
-            with tf.GradientTape() as tape:
-                y_pred, z_mean, z_log_var = self.autoencoder(X_batch, training=training)
-                kl_loss = self.compute_kl_loss(z_mean, z_log_var)
-                mse_loss = tf.keras.losses.mean_squared_error(y_batch, y_pred)
-                loss = K.mean(mse_loss + kl_loss)
-                # limb_loss = self.compute_limb_loss(y_pred)
-                # loss = K.mean(mse_loss + kl_loss + limb_loss*1)
-
-            if training:
-                gradients = tape.gradient(loss, self.autoencoder.trainable_variables)
-                self.autoencoder.optimizer.apply_gradients(zip(gradients, self.autoencoder.trainable_variables))
-
-            total_loss += loss.numpy()
-            total_mse_loss += np.mean(mse_loss)
-            total_kl_loss += np.mean(kl_loss)
-            # total_limb_loss += np.mean(limb_loss)
-
-        return total_loss / num_batches, total_mse_loss / num_batches, total_limb_loss / num_batches, total_kl_loss / num_batches
-
-    def evaluate(self, X_val, y_val):
-        X_val, y_val = self.preprocess(X_val, y_val)
-        val_losses = self.process_batch(X_val, y_val, training=False)
-        return val_losses
+            
+        if save_path:
+            torch.save(self.model, save_path)
+            logger.info(f"Model saved to {save_path}")
     
-    def evaluate_missing(self, X_val, y_val):
-        mask = np.isnan(X_val).reshape(X_val.shape[0], -1)
-        X_val, y_val = self.preprocess(X_val, y_val)
+    def train_step(self, X_batch, y_batch, optimizer):
+        X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
+        optimizer.zero_grad()
 
-        loss1, loss2 = 0, 0
-        dist1, dist2 = 0, 0
-        num_batches = 0
-        for i in range(0, len(X_val), self.batch_size):
-            X_batch = X_val[i:i + self.batch_size]
-            y_batch = y_val[i:i + self.batch_size]
-            mask_batch = mask[i:i + self.batch_size]
-            num_batches += 1
-            y_pred, _, _ = self.autoencoder(X_batch, training=False)
-            missing_mse_loss, ns_mse_loss = self.MSE_missing(y_batch, y_pred, mask_batch)
-            missing_dist, nm_dist = self.compute_dist(y_batch, y_pred, mask_batch)
-            loss1 += np.mean(missing_mse_loss)
-            loss2 += np.mean(ns_mse_loss)
-            dist1 += missing_dist
-            dist2 += nm_dist
-        return loss1 / num_batches, loss2 / num_batches, dist1 / num_batches, dist2 / num_batches
+        y_pred, z_mean, z_log_var = self.model(X_batch)
+        all_losses = self.loss_fn(y_pred, y_batch, z_mean, z_log_var)
+
+        all_losses['total_loss'].backward()
+        optimizer.step()
+
+        return all_losses
     
-    def compute_dist(self, y_batch, y_pred, mask):
-        mask = mask.reshape(-1, 16, 3).any(axis=-1)
-        y_batch = y_batch.reshape(-1, 16, 3)
-        y_pred = y_pred.numpy().reshape(-1, 16, 3)
+    def evaluate(self, val_dataloader):
+        self.model.eval()
 
-        dist = np.linalg.norm(y_batch - y_pred, axis=-1)
-        dist_missing = dist[mask]
-        dist_nm = dist[~mask]
+        with torch.no_grad():
+            all_losses = {'total_loss': 0, 'mse_loss': 0, 'kl_loss': 0, 'limb_loss': 0}
+            for X_batch, y_batch in val_dataloader:
+                X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
+                y_pred, z_mean, z_log_var = self.model(X_batch)
+                step_losses = self.loss_fn(y_pred, y_batch, z_mean, z_log_var)
+                for k, v in step_losses.items():
+                    all_losses[k] += v
+            
+            num_batches = len(val_dataloader)
+            avg_losses = {key: value / num_batches for key, value in all_losses.items()}
+            loss_str = " | ".join([f"{key}: {value:.4f}" for key, value in avg_losses.items()])
 
-        missing_dist = np.median(dist_missing)
-        nm_dist = np.median(dist_nm)
-
-        return missing_dist, nm_dist
-
-    def MSE_missing(self, y_batch, y_pred, mask):
-        y_batch = tf.convert_to_tensor(y_batch, tf.float32)
-
-        y_true_missing = tf.boolean_mask(y_batch, mask)
-        y_pred_missing = tf.boolean_mask(y_pred, mask)
-
-        y_true_nm = tf.boolean_mask(y_batch, ~mask)
-        y_pred_nm = tf.boolean_mask(y_pred, ~mask)
-
-        missing_mse = tf.reduce_mean(tf.square(y_true_missing - y_pred_missing))
-        nm_mse = tf.reduce_mean(tf.square(y_true_nm - y_pred_nm))
-
-        return missing_mse.numpy(), nm_mse.numpy()
-
+            logger.info(f"Validation: {loss_str}")
+        
+        return avg_losses['total_loss']
+    
     def predict(self, X):
-        normalized_data = self.poseprocessor.normalize(X)
-        normalized_data = self.poseprocessor.replace_nan(normalized_data)
-        with tf.device('/GPU:0'):
-            # TODO: The first way is much slower, why?
-            # pred, _, _ = self.autoencoder.predict(normalized_data.reshape(normalized_data.shape[0], -1), verbose=0)
-            pred, _, _ = self.autoencoder(normalized_data.reshape(normalized_data.shape[0], -1))
-        pred = pred.numpy().reshape(-1, 16, 3)
+        X_normalized = self.poseprocessor.normalize(X)
+        X_normalized = self.poseprocessor.replace_nan(X_normalized)
+        X_flat = torch.tensor(X_normalized.reshape(len(X_normalized), -1), dtype=torch.float32).to(self.device)
 
-        res = self.poseprocessor.denormalize(pred, X)
+        self.model.eval()
+        with torch.no_grad():
+            pred, _, _ = self.model(X_flat)
+        
+        denormalized_pred = self.poseprocessor.denormalize(pred.cpu().numpy().reshape(X.shape), X)
 
-        return res
-    
+        return denormalized_pred
+
 
 class PoseProcessor:
     def __init__(self, bodyparts, original_point='spinemid', x_point='neck', xz_point='tailbase', scale_length=1):
+        self.bodyparts = bodyparts
         self.bp_dict = {bp: i for i, bp in enumerate(bodyparts)}
 
         self.op_idx = self.bp_dict[original_point]
@@ -269,18 +274,16 @@ class PoseProcessor:
         filled_pose = np.nan_to_num(pose, nan=0.0, copy=True)
         return filled_pose
     
-    
-def generate_masked_data(data, bodyparts):
-    preprocessor = PoseProcessor(bodyparts=bodyparts, original_point='spinemid', x_point='neck', xz_point='tailbase', scale_length=6)
-    normalized_data = preprocessor.normalize(data)
+    def generate_masked_data(self, data):
+        normalized_data = self.normalize(data)
 
-    masked_data, gt_data = [], []
-    for r in range(1, 4):
-        for mask_list in itertools.combinations(bodyparts, r):
-            masked_data.append(preprocessor.mask(normalized_data, mask_list))
-            gt_data.append(normalized_data)
+        masked_data, gt_data = [], []
+        for r in range(1, 4):
+            for mask_list in itertools.combinations(self.bodyparts, r):
+                masked_data.append(self.mask(normalized_data, mask_list))
+                gt_data.append(normalized_data)
 
-    masked_data = np.concatenate(masked_data, axis=0)
-    gt_data = np.concatenate(gt_data, axis=0)
+        masked_data = np.concatenate(masked_data, axis=0)
+        gt_data = np.concatenate(gt_data, axis=0)
 
-    return masked_data, gt_data
+        return masked_data, gt_data

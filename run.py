@@ -1,45 +1,50 @@
-import os
-os.environ['HDF5_DISABLE_VERSION_CHECK'] = '2'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
-os.environ["NUMBA_NUM_THREADS"] = "4"
+import logging
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning) # TODO: Remove this in formal release
 
 from marmopose.version import __version__ as marmopose_version
-from marmopose.config import load_config
-from marmopose.utils.coordinates_setter import set_coordinates
-from marmopose.calibration.calibration import calibrate
-from marmopose.processing.prediction import predict
-from marmopose.processing.triangulation import triangulate
-from marmopose.visualization.display_2d import generate_video_2d
-from marmopose.visualization.display_3d import generate_video_3d
-from marmopose.visualization.display_combined import generate_video_combined
+from marmopose.config import Config
+from marmopose.calibration.calibration import Calibrator
+from marmopose.processing.prediction import Predictor
+from marmopose.visualization.display_2d import Visualizer2D
+from marmopose.visualization.display_3d import Visualizer3D
+from marmopose.processing.triangulation import Reconstructor3D
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 
 
 if __name__ == '__main__':
-    config_path = 'configs/double.yaml'
-    # config = load_config(config_path)
-    config = load_config(config_path, 
-                         project_dir='D:\ccq\MarmoSync\demos\double', 
-                         model_dir=['D:\ccq\MarmoSync\data\models\centroid_v1.9',
-                                    'D:\ccq\MarmoSync\data\models\id_centered_instance_v2.4'],
-                         vae_path='D:\ccq\MarmoSync\data\models\VAE_v1.h5')
+    config_path = 'configs/default.yaml'
 
-    # Define customized coordinates
-    # set_coordinates(config, video_inds = [1, 3], obj_name='axes', offset=(0, 0, 0), frame_idx=100)
+    config = Config(
+        config_path=config_path,
+        # n_tracks=2, 
 
-    # Camera calibration
-    # calibrate(config, verbose=True)
+        project='demos/single',
+        # det_model='models/detection_model_deployed',
+        # pose_model='models/pose_model_deployed',
 
-    # Predict 2D body parts
-    predict(config, batch_size=4, verbose=True)
+        dae_enable=True,
+        do_optimize=True
+    )
 
-    # 2D Visualization
-    # generate_video_2d(config, points_2d_source='original', verbose=True)
+    # calibrator = Calibrator(config)
+    # calibrator.set_coordinates(video_inds=[1, 2], obj_name='axes', offset=(150, 50, 120))
+    # calibrator.calibrate()
+    
 
-    # Compute 3D poses, fill in missing data, optimize coordinates
-    triangulate(config, points_2d_source='original', verbose=True)
+    predictor = Predictor(config, batch_size=4)
+    predictor.predict()
 
-    # 3D Visualization
-    # generate_video_3d(config, points_3d_source='optimized', fps=25, verbose=True)
+    reconstructor_3d = Reconstructor3D(config)
+    reconstructor_3d.triangulate()
 
-    # Combine 2D and 3D videos
-    # generate_video_combined(config, points_3d_source='optimized', points_2d_source='original', verbose=True)
+    visualizer_2d = Visualizer2D(config)
+    visualizer_2d.generate_videos_2d()
+
+    visualizer_3d = Visualizer3D(config)
+    visualizer_3d.generate_video_3d(source='original', start_frame_idx=0)
+    visualizer_3d.generate_video_combined(source='original')
+
+    # visualizer_3d.generate_video_3d(source='optimized')
+    # visualizer_3d.generate_video_combined(source='optimized')

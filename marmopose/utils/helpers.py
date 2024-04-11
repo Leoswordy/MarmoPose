@@ -1,19 +1,24 @@
-import cv2
+import logging
 import time
+from collections import defaultdict
+from pathlib import Path
+from queue import Queue
+from threading import Thread
+from typing import Dict, List, Tuple, Union
+
+import cv2
 import numpy as np
 import seaborn as sns
-from collections import defaultdict
-from queue import Queue
-from pathlib import Path
-from threading import Thread
-from typing import List, Dict, Union, Tuple
+
+logger = logging.getLogger(__name__)
 
 
-def get_color_list(cmap_name: str, number: int, cvtInt: bool = True) -> List[Tuple]:
-    cols = sns.color_palette(cmap_name, number)
+def get_color_list(cmap_name: str, number: int = None, cvtInt: bool = True) -> List[Tuple]:
+    cols = sns.color_palette(cmap_name, number) if number else sns.color_palette(cmap_name)
     if cvtInt:
         cols = [tuple(int(c*255) for c in col) for col in cols]
     return cols
+
 
 def get_video_params(video_path: Path) -> Dict[str, Union[int, float]]:
     cap = VideoStreamThread(str(video_path))
@@ -31,7 +36,7 @@ def project_vector(u: np.ndarray, v: np.ndarray) -> np.ndarray:
 
 
 class VideoStreamThread(Thread):
-    def __init__(self, path: str, cache_time: int = 30, simulate_live: bool = False, verbose: bool = True) -> None:
+    def __init__(self, path: str, cache_time: int = 30, simulate_live: bool = False) -> None:
         """
         Args:
             path: The path to the video file.
@@ -51,7 +56,6 @@ class VideoStreamThread(Thread):
         self.frame_queue = Queue(maxsize = self.params['fps'] * cache_time)
 
         self.simulate_live = simulate_live
-        self.verbose = verbose
 
         self.stop_flag = False
 
@@ -73,7 +77,7 @@ class VideoStreamThread(Thread):
                 time.sleep(0.01)
 
         self.cap.release()
-        if self.verbose: print(f"{self.params['path']} Released!")
+        logger.debug(f"{self.params['path']} Released!")
 
     def read(self) -> np.ndarray:
         """Reads a frame from the queue."""
@@ -105,7 +109,6 @@ class VideoStreamThread(Thread):
         """
         return self.params[key]
     
-
 
 class Timer:
     """A simple timer class for recording time events.

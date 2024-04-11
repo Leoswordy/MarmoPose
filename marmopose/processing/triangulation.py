@@ -1,76 +1,89 @@
-import numpy as np
+import logging
 from pathlib import Path
-from typing import Dict, Any
 
-from marmopose.utils.data_io import load_points_2d_h5, save_points_3d_h5
+import torch
+import numpy as np
+
+from marmopose.config import Config
 from marmopose.calibration.cameras import CameraGroup
+from marmopose.processing.autoencoder import DaeTrainer
 from marmopose.processing.optimization import optimize_coordinates
+from marmopose.utils.data_io import load_points_bboxes_2d_h5, save_points_3d_h5
+
+logger = logging.getLogger(__name__)
 
 
-def triangulate(config: Dict[str, Any], points_2d_source: str = 'filtered', verbose: bool = True) -> None:
-    """
-    Triangulate 2D points to 3D coordinates using camera calibration parameters.
+class Reconstructor3D:
+    def __init__(self, config: Config):
+        self.init_dir(config)
 
-    Args:
-        config: A dictionary containing configuration parameters.
-        points_2d_source (optional): The source of 2D points to use for triangulation. Must be one of: 'original', 'filtered'. Defaults to 'filtered'.
-        verbose (optional): Whether to print progress messages. Defaults to True.
+        self.camera_group = CameraGroup.load_from_json(self.cam_params_path)
+        logger.info(f'Loaded camera group from: {self.cam_params_path}')
 
-    Raises:
-        AssertionError: If `points_2d_source` is not one of: 'original', 'filtered'.
-    """
-    assert points_2d_source in ['original', 'filtered'], f'Invalid points_2d_source, must be one of: original, filtered'
+        self.n_tracks = config.animal['n_tracks']
+        self.config = config
 
-    project_dir = Path(config['directory']['project'])
-    calibration_path = project_dir / config['directory']['calibration'] / 'camera_params.json'
-    points_2d_path = project_dir / config['directory']['points_2d'] / f'{points_2d_source}.h5'
-    points_3d_path = project_dir / config['directory']['points_3d'] / 'original.h5'
-    points_3d_optimized_path = project_dir / config['directory']['points_3d'] / 'optimized.h5'
-    points_3d_path.parent.mkdir(parents=True, exist_ok=True)
-
-    n_tracks = config['animal']['number']
-
-    camera_group = CameraGroup.load_from_json(calibration_path)
-
-    all_points_with_score_2d = load_points_2d_h5(points_2d_path, verbose=verbose)
-
-    for track_idx in range(n_tracks):
-        track_name = f'track{track_idx+1}'
-
-        points_with_score_2d = all_points_with_score_2d[:, track_idx] # (n_cams, n_frames, n_bodyparts, (x, y, score)))
-        points_3d = reconstruct_3d_coordinates(points_with_score_2d, camera_group, verbose) # (n_frames, n_bodyparts, (x, y, z))
-
-        save_points_3d_h5(points=points_3d, 
-                          name=track_name, 
-                          file_path=points_3d_path, 
-                          verbose=verbose)
-        
-        if config['optimization']['enable']:
-            points_3d_optimized = optimize_coordinates(config, camera_group, points_3d, points_with_score_2d, 0, verbose)
-            save_points_3d_h5(points=points_3d_optimized, 
-                              name=track_name, 
-                              file_path=points_3d_optimized_path, 
-                              verbose=verbose)
-
-
-def reconstruct_3d_coordinates(points_with_score_2d: np.ndarray, camera_group: CameraGroup, verbose: bool = False) -> np.ndarray:
-    """
-    Reconstructs 3D coordinates from 2D points using triangulation.
-
-    Args:
-        points_with_score_2d: Array of shape (n_cams, n_frames, n_bodyparts, 3) containing 2D points and their scores.
-        camera_group: CameraGroup object containing camera parameters.
-        verbose (optional): Whether to print verbose output. Defaults to False.
-
-    Returns:
-        Array of shape (n_frames, n_bodyparts, 3) containing reconstructed 3D coordinates.
-    """
+        self.build_dae_model(config.directory['dae_model'])
     
-    n_cams, n_frames, n_bodyparts, _ = points_with_score_2d.shape
-    points_2d, scores_2d = points_with_score_2d[..., :2], points_with_score_2d[..., 2]
-    points_2d_flat = points_2d.reshape(n_cams, n_frames*n_bodyparts, 2)
+    def init_dir(self, config):
+        self.cam_params_path = Path(config.sub_directory['calibration']) / 'camera_params.json'
+        self.points_2d_path = Path(config.sub_directory['points_2d']) / 'original.h5'
+        self.points_3d_path = Path(config.sub_directory['points_3d']) / 'original.h5'
+        self.points_3d_optimized_path = Path(config.sub_directory['points_3d']) / 'optimized.h5'
+    
+    def build_dae_model(self, dae_model_dir):
+        checkpoint_files = list(Path(dae_model_dir).glob('*best*.pth'))
+        assert len(checkpoint_files) == 1, f'Zero/Multiple best checkpoint files found in {dae_model_dir}'
 
-    points_3d_flat = camera_group.triangulate(points_2d_flat, undistort=True, verbose=verbose)
-    points_3d = points_3d_flat.reshape((n_frames, n_bodyparts, 3))
+        dae_checkpoint = str(checkpoint_files[0])
+        logger.info(f'Loaded DAE from: {dae_checkpoint}')
 
-    return points_3d
+        dae = torch.load(dae_checkpoint)
+        self.dae_trainer = DaeTrainer(model=dae, bodyparts=self.config.animal['bodyparts'])
+
+    def triangulate(self, all_points_with_score_2d: np.ndarray = None):
+        # TODO: Support optimization
+        if not all_points_with_score_2d:
+            all_points_with_score_2d, _ = load_points_bboxes_2d_h5(self.points_2d_path)
+        assert all_points_with_score_2d.shape[1] == self.n_tracks, f'Expected {self.n_tracks} tracks, got {all_points_with_score_2d.shape[1]}'
+
+        for track_idx in range(self.n_tracks):
+            track_name = f'track{track_idx+1}'
+
+            points_with_score_2d = all_points_with_score_2d[:, track_idx] # (n_cams, n_frames, n_bodyparts, (x, y, score)))
+            points_3d = self.triangulate_instance(points_with_score_2d)
+            save_points_3d_h5(points=points_3d, 
+                              name=track_name, 
+                              file_path=self.points_3d_path)
+            
+            if self.config.optimization['do_optimize']:
+                points_3d_optimized = optimize_coordinates(self.config, self.camera_group, points_3d, points_with_score_2d)
+                save_points_3d_h5(points=points_3d_optimized, 
+                                  name=track_name, 
+                                  file_path=self.points_3d_optimized_path)
+    
+    def triangulate_instance(self, points_with_score_2d: np.ndarray, verbose: bool = True):
+        n_cams, n_frames, n_bodyparts, n_dim = points_with_score_2d.shape
+        points_with_score_2d_flat = points_with_score_2d.reshape(n_cams, n_frames*n_bodyparts, n_dim)
+
+        points_3d_flat = self.camera_group.triangulate(points_with_score_2d_flat, undistort=True, verbose=verbose)
+        points_3d = points_3d_flat.reshape((n_frames, n_bodyparts, 3)) # (n_frames, n_bodyparts, (x, y, z))
+
+        if self.config.triangulation['dae_enable']:
+            points_3d_filled = self.fill_with_dae(points_3d)
+            logger.info(f'Filled missing values with Denoising Autoencoder')
+        else:
+            points_3d_filled = points_3d
+
+        return points_3d_filled 
+    
+    def fill_with_dae(self, points_3d: np.ndarray) -> np.ndarray:
+        filled_points_3d = points_3d.copy()
+        # First find outliers and set them to NaN
+        # mask_outliers = np.abs(points_3d - np.nanmean(points_3d, axis=0)) > 2 * np.nanstd(points_3d, axis=0)
+
+        mask_invalid = np.isnan(points_3d)
+        res = self.dae_trainer.predict(points_3d)
+        filled_points_3d[mask_invalid] = res[mask_invalid]
+
+        return filled_points_3d # (n_frames, n_bodyparts, (x, y, z))

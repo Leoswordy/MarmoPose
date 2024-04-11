@@ -1,107 +1,145 @@
-import cv2
 import pickle
-import numpy as np
-from pathlib import Path
+import logging
 from collections import defaultdict
-from typing import Dict, Any
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+import json
+
+import cv2
+import numpy as np
 
 from marmopose.calibration.cameras import CameraGroup
 from marmopose.calibration.boards import Checkerboard
-from marmopose.utils.helpers import orthogonalize_vector
 from marmopose.utils.data_io import load_axes
+from marmopose.utils.helpers import orthogonalize_vector
+from marmopose.config import Config
+
+logger = logging.getLogger(__name__)
 
 
-def calibrate(config: Dict[str, Any], verbose: bool = True) -> None:
-    project_dir = Path(config['directory']['project'])
-    calibration_dir = project_dir / config['directory']['calibration']
-    calib_video_paths = sorted(calibration_dir.glob(f"*.{config['video_extension']}"))
-    output_dir = project_dir / config['directory']['calibration']
-    output_path = output_dir / 'camera_params.json'
+class Calibrator:
+    def __init__(self, config: Config):
+        self.config = config
+        self.init_dir(config)
 
-    cam_names, video_list = get_video_list(calib_video_paths)
-    board = get_calibration_board(config)
-
-    if not output_path.exists():
-        detected_file = output_dir / 'detected_boards.pickle'
-        if detected_file.exists():
-            if verbose: print(f'Loading detected boards from: {detected_file}')
-            with open(detected_file, 'rb') as f:
-                all_rows = pickle.load(f)
-        else:
-            if verbose: print('Detecting boards in videos...')
-            all_rows = get_rows_videos(video_list, board, verbose)
-            with open(detected_file, 'wb') as f:
-                pickle.dump(all_rows, f)
-        
-        cgroup = CameraGroup.from_names(cam_names, config['calibration']['fisheye'])
-        cgroup.set_camera_sizes_videos(video_list)
-
-        cgroup.calibrate_rows(all_rows, board, 
-                              init_intrinsics=True, init_extrinsics=True, 
-                              n_iters=10, start_mu=15, end_mu=1, 
-                              max_nfev=200, ftol=1e-4, 
-                              n_samp_iter=200, n_samp_full=1000, 
-                              error_threshold=2.5, verbose=verbose)
-    else:
-        if verbose: print(f'Calibration result already exists in: {output_path}')
-        cgroup = CameraGroup.load_from_json(str(output_path))
-
-    if config['triangulation']['user_define_axes']:
-        update_extrinsics_by_user_define_axes(config, cgroup, verbose)
-
-    cgroup.save_to_json(output_path)
-    print(f'Calibration done! Result stored in: {output_path}')
-
-
-def get_video_list(video_paths):
-    cam_videos = defaultdict(list)
-    cam_names = set()
-    for video_path in video_paths:
-        name = video_path.stem
-        cam_videos[name].append(str(video_path))
-        cam_names.add(name)
-
-    cam_names = sorted(cam_names)
-    video_list = [sorted(cam_videos[cname]) for cname in cam_names]
+    def init_dir(self, config):
+        self.calibration_path = Path(config.sub_directory['calibration'])
+        self.calib_video_paths = sorted(self.calibration_path.glob(f"*.mp4"))
+        self.output_path = self.calibration_path / 'camera_params.json'
     
-    return cam_names, video_list
+    
+    def calibrate(self):
+        cam_names, video_list = self.get_video_list(self.calib_video_paths)
+        board = self.get_calibration_board(self.config)
 
+        if not self.output_path.exists():
+            detected_file = self.calibration_path / 'detected_boards.pickle'
+            if detected_file.exists():
+                logger.info(f'Loading detected boards from: {detected_file}')
+                with open(detected_file, 'rb') as f:
+                    all_rows = pickle.load(f)
+            else:
+                logger.info('Detecting boards in videos...')
+                all_rows = self.get_rows_videos(video_list, board)
+                with open(detected_file, 'wb') as f:
+                    pickle.dump(all_rows, f)
 
-def get_calibration_board(config: Dict[str, Any]) -> Checkerboard:
-    calibration_settings = config['calibration']
-    board_size = calibration_settings['board_size']
+            cgroup = CameraGroup.from_names(cam_names, self.config.calibration['fisheye'])
+            cgroup.set_camera_sizes_videos(video_list)
 
-    return Checkerboard(squaresX=board_size[0], 
-                        squaresY=board_size[1], 
-                        square_length=calibration_settings['board_square_side_length'])
+            cgroup.calibrate_rows(all_rows, board, 
+                                 init_intrinsics=True, init_extrinsics=True, 
+                                 n_iters=10, start_mu=15, end_mu=1, 
+                                 max_nfev=200, ftol=1e-4, 
+                                 n_samp_iter=200, n_samp_full=1000, 
+                                 error_threshold=2.5, verbose=True)
+        else:
+            logger.info(f'Calibration result already exists in: {self.output_path}')
+            cgroup = CameraGroup.load_from_json(str(self.output_path))
+        
+        if self.config.triangulation['user_define_axes']:
+            self.update_extrinsics_by_user_define_axes(cgroup)
+        
+        cgroup.save_to_json(self.output_path)
+        logger.info(f'Calibration done! Result stored in: {self.output_path}')
+    
+    def set_coordinates(self, video_inds: List, offset: Tuple[float, float, float], obj_name: str = 'axes', frame_idx: int = 0) -> None:
+        """
+        Set coordinates for each camera by capturing from video frames.
 
+        Args:
+            config: Configuration dictionary containing project settings.
+            video_inds: The index of videos for setting coordinates.
+            offset: 3D Offset values (x, y, z).
+            obj_name: Name of the object for which coordinates are being set.
+            frame_idx: Frame index from which to capture the coordinates. Defaults to 0.
+        """
+        video_paths = sorted(Path(self.config.sub_directory['videos_raw']).glob(f"*.mp4"))
 
-def get_rows_videos(video_list, board, verbose=True):
-    all_rows = []
+        coordinates_dict = {'offset': offset}
+        for i, video_path in enumerate(video_paths):
+            if i+1 not in video_inds:
+                continue
+            cam_name = video_path.stem
+            cap = cv2.VideoCapture(str(video_path))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            coordinates_dict[cam_name] = capture_coordinates(cap, cam_name)
+            cap.release()
 
-    for videos in video_list:
-        rows_cam = []
-        for vnum, vidname in enumerate(videos):
-            if verbose: print(vidname)
-            rows = board.detect_video(vidname, prefix=vnum, progress=verbose)
-            if verbose: print("{} boards detected".format(len(rows)))
-            rows_cam.extend(rows)
-        all_rows.append(rows_cam)
+        output_path = self.calibration_path / f'{obj_name}.json'
+        with open(output_path, 'w') as f:
+            json.dump(coordinates_dict, f, indent=4)
 
-    return all_rows
+        logger.info(f'Coordinates of {obj_name} saved in: {output_path}')
 
+    @staticmethod
+    def get_video_list(video_paths):
+        cam_videos = defaultdict(list)
+        cam_names = set()
+        for video_path in video_paths:
+            name = video_path.stem
+            cam_videos[name].append(str(video_path))
+            cam_names.add(name)
 
-def update_extrinsics_by_user_define_axes(config, camera_group, verbose=True):
-    project_dir = Path(config['directory']['project'])
-    axes_path = project_dir / config['directory']['calibration'] / 'axes.json'
-    if not axes_path.exists():
-        print(f'Axes file not found in: {axes_path}')
-    else:
-        if verbose: print('Updating extrinsics by user-defined axes')
-        axes = load_axes(axes_path)
-        T = construct_transformation_matrix(camera_group, axes)
-        for camera in camera_group.cameras:
-            update_camera_parameters(camera, T)
+        cam_names = sorted(cam_names)
+        video_list = [sorted(cam_videos[cname]) for cname in cam_names]
+        
+        return cam_names, video_list
+    
+    @staticmethod
+    def get_calibration_board(config: Config) -> Checkerboard:
+        board_size = config.calibration['board_size']
+        square_length = config.calibration['board_square_side_length']
+
+        return Checkerboard(squaresX=board_size[0], 
+                            squaresY=board_size[1], 
+                            square_length=square_length)
+    
+    @staticmethod
+    def get_rows_videos(video_list, board):
+        all_rows = []
+
+        for videos in video_list:
+            rows_cam = []
+            for vnum, vidname in enumerate(videos):
+                logger.info(vidname)
+                rows = board.detect_video(vidname, prefix=vnum, progress=True)
+                logger.info(f"{len(rows)} boards detected")
+                rows_cam.extend(rows)
+            all_rows.append(rows_cam)
+
+        return all_rows
+    
+    def update_extrinsics_by_user_define_axes(self, camera_group):
+        axes_path = Path(self.calibration_path) / 'axes.json'
+        if not axes_path.exists():
+            logger.info(f'Axes file not found in: {axes_path}')
+        else:
+            logger.info('Updating extrinsics by user-defined axes')
+            axes = load_axes(axes_path)
+            T = construct_transformation_matrix(camera_group, axes)
+            for camera in camera_group.cameras:
+                update_camera_parameters(camera, T)
 
 
 def update_camera_parameters(camera, T):
@@ -139,3 +177,50 @@ def construct_transformation_matrix(camera_group, axes):
     T[:3, 3] = -R @ axes_3d[0]
 
     return T
+
+
+def capture_event(event: int, x: int, y: int, flags: int, params: Tuple[List[Tuple[int, int]], int]) -> None:
+    """
+    Mouse callback function to add coordinates to the list when the left mouse button is clicked.
+
+    Args:
+        event: Type of mouse event.
+        x: X-coordinate of mouse event.
+        y: Y-coordinate of mouse event.
+        flags: Any relevant flags related to the mouse event.
+        params: Tuple containing list to which coordinates are appended and current point index.
+    """
+    cam_coordinates, current_point_idx = params
+    if event == cv2.EVENT_LBUTTONDOWN:
+        point_types = ['original point', 'x-axis point', 'y-axis point']
+        print(f'{point_types[current_point_idx[0]]}: ({x}, {y})')
+        cam_coordinates.append((x, y))
+        current_point_idx[0] += 1
+
+
+def capture_coordinates(cap: cv2.VideoCapture, cam_name: str) -> List[Tuple[int, int]]:
+    """
+    Display video frame and capture coordinates of mouse clicks on it.
+
+    Args:
+        cap: VideoCapture object from which frames are read.
+        cam_name: Name of the camera for which coordinates are being captured.
+
+    Returns:
+        List of coordinates captured from the video frame.
+    """
+    print(f'\nSetting axes for {cam_name}...')
+    ret, img = cap.read()
+    if not ret:
+        return []
+
+    cv2.imshow(cam_name, img)
+    cam_coords = []
+    current_point_idx = [0]
+    cv2.setMouseCallback(cam_name, capture_event, (cam_coords, current_point_idx))
+
+    while len(cam_coords) < 3:
+        cv2.waitKey(1)
+
+    cv2.destroyAllWindows()
+    return cam_coords

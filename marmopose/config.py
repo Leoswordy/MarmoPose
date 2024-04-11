@@ -1,86 +1,133 @@
-import yaml
+import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import yaml
+
+logger = logging.getLogger(__name__)
 
 
-DEFAULT_CONFIG = {
-    'video_extension': 'mp4',
-    'calibration': {
-        'board_type': 'checkerboard',
-        'fisheye': True
-    },
-    'visualization': {
-        'track_cmap': 'Set2',
-        'skeleton_cmap': 'hls'
-    },
-    'filter': {
-        'threshold': 0.2
-    },
-    'triangulation': {
-        'user_define_axes': True
-    },
-    'optimization': {
-        'enable': True,
-        'n_deriv_smooth': 1,
-        'scale_smooth': 1,
-        'scale_length': 2,
-        'scale_length_weak': 1,
-        'constraints': [],
-        'constraints_weak': []
-    },
-    'directory': {
-        'calibration': 'calibration',
-        'points_2d': 'points_2d',
-        'points_3d': 'points_3d',
-        'videos_raw': 'videos_raw',
-        'videos_labeled_2d': 'videos_labeled_2d',
-        'videos_labeled_3d': 'videos_labeled_3d'
+class Config:
+    DEFAULT_CONFIG = {
+        'calibration': {
+            'board_type': 'checkerboard',
+            'board_square_side_length': 45,
+            'fisheye': True
+        },
+        'visualization': {
+            'track_cmap': 'Set2',
+            'skeleton_cmap': 'hls'
+        },
+        'threshold': {
+            'bbox': 0.2,
+            'iou': 0.8,
+            'keypoint': 0.5
+        },
+        'triangulation': {
+            'user_define_axes': True,
+            'dae_enable': True
+        },
+        'optimization': {
+            'enable': True,
+            'n_deriv_smooth': 1,
+            'scale_smooth': 2,
+            'scale_length': 2,
+            'scale_length_weak': 1
+        },
+        'sub_directory': {
+            'calibration': 'calibration',
+            'points_2d': 'points_2d',
+            'points_3d': 'points_3d',
+            'videos_raw': 'videos_raw',
+            'videos_labeled_2d': 'videos_labeled_2d',
+            'videos_labeled_3d': 'videos_labeled_3d'
+        }
     }
-}
 
+    def __init__(self, config_path: str, **kwargs: Any):
+        self.config = self.load_config(config_path)
 
-def set_defaults(target: Dict[str, Any], defaults: Dict[str, Any]) -> None:
-    """
-    Recursively sets default values in the target dictionary.
+        self.override_config(self.config, **kwargs)
 
-    Args:
-        target: The target dictionary where default values are to be set.
-        defaults: The dictionary containing default values.
-    """
-    for key, value in defaults.items():
-        if key not in target:
-            target[key] = value
-        elif isinstance(value, dict):
-            set_defaults(target[key], value)
-            
+        self.build_directory()
 
-def load_config(config_path: str, project_dir: str = None, model_dir: str = None, vae_path: str = None) -> Dict[str, Any]:
-    """
-    Load configuration from a YAML file and set default values if not present.
+        self.validate_paths()
 
-    Args:
-        config_path: Path to the YAML configuration file.
-        project_dir (optional): Path to the project directory, overrides the value in the config file. Defaults to None.
-        model_dir (optional): Path to the model directory, overrides the value in the config file. Defaults to None.
-        vae_path (optional): Path to the VAE model file, overrides the value in the config file. Defaults to None.
+    def load_config(self, config_path: str) -> dict:
+        config_file = Path(config_path)
+        if not config_file.exists():
+            raise FileNotFoundError(f'Config file not found: {config_path}')
 
-    Returns:
-        A dictionary containing the configuration values.
-    """
-    config_file = Path(config_path)
-    if config_file.exists():
         with open(config_file, 'r') as file:
-            config = yaml.safe_load(file)
-    else:
-        raise FileNotFoundError(f'Config file not found: {config_path}')
+            config = yaml.safe_load(file) or {}
+        
+        self.set_defaults(config, self.DEFAULT_CONFIG)
+        return config
 
-    set_defaults(config, DEFAULT_CONFIG)
+    @staticmethod
+    def set_defaults(target: dict, defaults: dict) -> None:
+        for key, value in defaults.items():
+            if key not in target:
+                target[key] = value
+            elif isinstance(value, dict):
+                Config.set_defaults(target[key], value)
 
-    if project_dir is not None: config['directory']['project'] = project_dir
-    if model_dir is not None: config['directory']['model'] = model_dir
-    if vae_path is not None: config['directory']['vae'] = vae_path
+    def override_config(self, config: dict, **kwargs: Any) -> None:
+        # TODO: Sub-dict might have the same key, handle it
+        for key, value in kwargs.items():
+            if key in config:
+                logger.info(f'Overriding config | {key}: {config[key]} -> {value}')
+                config[key] = value
+            else:
+                for sub_value in config.values():
+                    if isinstance(sub_value, dict):
+                        self.override_config(sub_value, **{key: value})
+    
+    def build_directory(self) -> None:
+        project_dir = Path(self.config['directory']['project'])
+        for key, rel_path in self.config['sub_directory'].items():
+            full_path = project_dir / rel_path
+            self.config['sub_directory'][key] = str(full_path)
+            if rel_path not in ['calibration', 'videos_raw']:
+                if not full_path.exists():
+                    full_path.mkdir(parents=True, exist_ok=True)
+    
+    def validate_paths(self) -> None:
+        for value in self.config['directory'].values():
+            if not Path(value).exists():
+                raise FileNotFoundError(f'Directory not found: {value}')
 
-    if not Path(config['directory']['project']).exists():
-        raise FileNotFoundError(f'Project directory not found: {config["directory"]["project"]}')
+    @property
+    def directory(self):
+        return self.config['directory']
 
-    return config
+    @property
+    def sub_directory(self):
+        return self.config['sub_directory']
+    
+    @property
+    def threshold(self):
+        return self.config['threshold']
+    
+    @property
+    def animal(self):
+        return self.config['animal']
+    
+    @property
+    def triangulation(self):
+        return self.config['triangulation']
+
+    @property
+    def visualization(self):
+        return self.config['visualization']
+    
+    @property
+    def optimization(self):
+        return self.config['optimization']
+    
+    @property
+    def calibration(self):
+        return self.config['calibration']
+
+    def __repr__(self) -> str:
+        return yaml.dump(self.config)

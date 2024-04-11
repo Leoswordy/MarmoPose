@@ -1,30 +1,22 @@
+import logging
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
 from scipy import optimize
 from scipy.sparse import dok_matrix
-from typing import Dict, Any, List, Tuple
 
-from marmopose.processing.filter import interpolate_data
 from marmopose.calibration.cameras import CameraGroup
+from marmopose.processing.filter import interpolate_data
 from marmopose.utils.helpers import Timer
-from marmopose.processing.autoencoder import VariationalAutoencoder
+
+logger = logging.getLogger(__name__)
 
 
-def fill_with_vae(VAE: VariationalAutoencoder, points_3d: np.ndarray) -> np.ndarray:
-    filled_points_3d = points_3d.copy()
-
-    mask_invalid = np.isnan(points_3d)
-    res = VAE.predict(points_3d)
-    filled_points_3d[mask_invalid] = res[mask_invalid]
-
-    return filled_points_3d
-    
-
-def optimize_coordinates(config: Dict[str, Any],
+def optimize_coordinates(config,
                          camera_group: CameraGroup,
                          points_3d: np.ndarray,
                          points_with_score_2d: np.ndarray,
-                         start_frame: int = 0,
-                         verbose: bool = False) -> np.ndarray:
+                         start_frame: int = 0) -> np.ndarray:
     """
     Optimize the 3D points by minimizing the reprojection error, smoothness error, limb length error.
 
@@ -34,7 +26,6 @@ def optimize_coordinates(config: Dict[str, Any],
         points_3d: 3D points with shape (n_frames, n_bodyparts, 3), final channel (x, y, z)
         points_with_score_2d: 2D points with shape (n_cams, n_frames, n_bodyparts, 3), final channel (x, y, score)
         start_frame: Index of the first frame to optimize.
-        verbose: If True, the function will print detailed information.
 
     Returns:
         Optimized 3D points with shape (n_frames, n_bodyparts, 3).
@@ -43,27 +34,22 @@ def optimize_coordinates(config: Dict[str, Any],
         [((0, 2), 30.0), ((0, 1), 30.0)], which means the length of bodypart 0-1 should be approximately 30 mm.
     """
     timer = Timer().start()
-    n_deriv_smooth = config['optimization']['n_deriv_smooth']
-    scale_smooth = config['optimization']['scale_smooth']
-    scale_length = config['optimization']['scale_length']
-    scale_length_weak = config['optimization']['scale_length_weak']
+    n_deriv_smooth = config.optimization['n_deriv_smooth']
+    scale_smooth = config.optimization['scale_smooth']
+    scale_length = config.optimization['scale_length']
+    scale_length_weak = config.optimization['scale_length_weak']
 
     bodypart_dist = parse_constraints(config, 'bodypart_distance')
     bodypart_dist_weak = parse_constraints(config, 'bodypart_distance_weak')
-    bodyparts = config['animal']['bodyparts']
     
-    # TODO: Optimize prior using autoencoder
-    VAE = VariationalAutoencoder(input_dim=(48,), hidden_dim=128, latent_dim=40, bodyparts=bodyparts, skeleton_constraints=bodypart_dist)
-    VAE.autoencoder.load_weights(config['directory']['vae'])
-    points_3d_prior = fill_with_vae(VAE, points_3d)
+    points_3d_prior = points_3d
     points_3d_interp = np.apply_along_axis(interpolate_data, 0, points_3d_prior)
 
     points_3d_original, points_3d_unprocessed = points_3d_interp[:start_frame], points_3d_interp[start_frame:]
-    # mask_valid = ~np.isnan(points_3d[start_frame:, :, :])
     points_with_score_2d_unprocessed = points_with_score_2d[:, start_frame:]
     initial_params = points_3d_unprocessed.ravel()
-    if verbose: print(f'Optimizing {points_3d_unprocessed.shape[0]} frames, {initial_params.shape[0]} parameters in total')
-    jac_sparsity = get_jac_sparsity(points_with_score_2d_unprocessed[..., :2], n_deriv_smooth, bodypart_dist, bodypart_dist_weak, verbose)
+    logger.info(f'Optimizing {points_3d_unprocessed.shape[0]} frames, {initial_params.shape[0]} parameters in total')
+    jac_sparsity = get_jac_sparsity(points_with_score_2d_unprocessed[..., :2], n_deriv_smooth, bodypart_dist, bodypart_dist_weak)
 
     timer.record('init')
     result = optimize.least_squares(fun=compute_residuals, 
@@ -73,7 +59,7 @@ def optimize_coordinates(config: Dict[str, Any],
                                     ftol = 1e-2,
                                     max_nfev = 7,
                                     jac_sparsity=jac_sparsity,
-                                    verbose=2*verbose, 
+                                    verbose=2, 
                                     args=(camera_group,
                                           points_with_score_2d_unprocessed, 
                                           n_deriv_smooth,
@@ -83,9 +69,8 @@ def optimize_coordinates(config: Dict[str, Any],
                                           bodypart_dist,
                                           bodypart_dist_weak))
     points_3d_optimized = result.x.reshape(points_3d_unprocessed.shape)
-    # points_3d_optimized[mask_valid] = points_3d[start_frame:, :, :][mask_valid]
     residuals = result.fun
-    if verbose: print(f'Optimization finished mean residual: {np.mean(residuals):.2f}')
+    logger.info(f'Optimization finished mean residual: {np.mean(residuals):.2f}')
     timer.record('optimize')
     timer.show()
 
@@ -95,8 +80,7 @@ def optimize_coordinates(config: Dict[str, Any],
 
 def get_jac_sparsity(points_2d: np.ndarray, n_deriv_smooth: int,
                      bodypart_dist: List[Tuple[Tuple[int, int], float]], 
-                     bodypart_dist_weak: List[Tuple[Tuple[int, int], float]], 
-                     verbose: bool) -> dok_matrix:
+                     bodypart_dist_weak: List[Tuple[Tuple[int, int], float]]) -> dok_matrix:
     """
     Calculate Jacobian Sparsity Pattern.
 
@@ -105,7 +89,6 @@ def get_jac_sparsity(points_2d: np.ndarray, n_deriv_smooth: int,
         n_deriv_smooth: Number of derivatives to smooth.
         bodypart_dist: Strong constraints on body parts.
         bodypart_dist_weak: Weak constraints on body parts.
-        verbose: Verbose output flag.
 
     Returns:
         Sparse Jacobian Matrix.
@@ -120,7 +103,7 @@ def get_jac_sparsity(points_2d: np.ndarray, n_deriv_smooth: int,
     n_errors_lengths = n_constraints * n_frames
     n_errors_lengths_weak = n_constraints_weak * n_frames
     n_errors = n_errors_reproj + n_errors_smooth + n_errors_lengths + n_errors_lengths_weak
-    if verbose: print(f'Optimizing {n_errors_reproj} reprojection errors, {n_errors_smooth} smoothness errors, {n_errors_lengths} limb length errors, {n_errors_lengths_weak} weak limb length errors')
+    logger.info(f'Optimizing {n_errors_reproj} reprojection errors, {n_errors_smooth} smoothness errors, {n_errors_lengths} limb length errors, {n_errors_lengths_weak} weak limb length errors')
 
     sparse_jac = dok_matrix((n_errors, n_frames*n_bodyparts*3), dtype='int16')
 
@@ -155,8 +138,6 @@ def get_jac_sparsity(points_2d: np.ndarray, n_deriv_smooth: int,
     return sparse_jac
 
 
-# TODO: Confirm if it is necessary
-# @jit(forceobj=True, parallel=True)
 def compute_residuals(points_3d_flat: np.ndarray, *args: Tuple) -> np.ndarray:
     """
     Compute Residuals for Optimization.
@@ -278,10 +259,10 @@ def parse_constraints(config: Dict[str, Any], key: str) -> List[Tuple[Tuple[int,
     Returns:
         Parsed constraints.
     """
-    bodyparts = config['animal']['bodyparts']
+    bodyparts = config.animal['bodyparts']
     bodypart_indices = {bp_name: idx for idx, bp_name in enumerate(bodyparts)}
     
-    constraint_dict = config['optimization'][key]
+    constraint_dict = config.optimization[key]
     constraint_list = []
     for key, value in constraint_dict.items():
         bp = tuple([bodypart_indices[bp.strip()] for bp in key.split('-')])
