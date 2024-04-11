@@ -49,7 +49,7 @@ pip install --upgrade Pillow h5py seaborn scikit-video mayavi vtk==9.2.6
 
 ## Usage
 
-**Step 1.** Download models and demos from [MarmoPose1.0](https://cloud.tsinghua.edu.cn/d/c9c1425288a643ee814c/), and place them in the same directory as `run.py`. Alternatively, store them in another directory and specify it in the config file.
+**Step 1.** Download models and demos from [MarmoPose](https://cloud.tsinghua.edu.cn/d/c9c1425288a643ee814c/), and place them in the same directory as `run.py`. Alternatively, store them in another directory and specify it in the config file.
 
 **Step 2.** Prepare aligned calibration videos, run calibration.
 
