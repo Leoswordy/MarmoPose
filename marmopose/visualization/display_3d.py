@@ -25,7 +25,7 @@ class Visualizer3D:
         self.points_3d_path = Path(config.sub_directory['points_3d']) / 'original.h5'
         self.video_labeled_3d_path = Path(config.sub_directory['videos_labeled_3d']) / 'original.mp4'
         self.videos_2d_dir = Path(config.sub_directory['videos_labeled_2d'])
-        self.video_combined_path = Path(config.sub_directory['videos_labeled_3d']) / 'combined.mp4'
+        self.video_combined_path = Path(config.sub_directory['videos_labeled_3d']) / 'original_combined.mp4'
     
     def init_visual_cfg(self, config):
         bodyparts = config.animal['bodyparts']
@@ -37,27 +37,6 @@ class Visualizer3D:
         colors = get_color_list(config.visualization['track_cmap'], cvtInt=False)
         new_order = [1, 0, 4, 3, 2]
         self.track_color_list = [colors[i] if i < len(new_order) else colors[i] for i in new_order] + colors[len(new_order):]
-    
-    # def generate_video_3d(self, source='original', fps: int=25):
-    #     assert source in ['original', 'optimized'], f'Invalid data source: {source}'
-    #     if source == 'optimized':
-    #         self.points_3d_path = self.points_3d_path.with_name('optimized.h5')
-    #         self.video_labeled_3d_path = self.video_labeled_3d_path.with_name('optimized.mp4')
-
-    #     all_points_3d = load_points_3d_h5(self.points_3d_path)
-    #     n_tracks, n_frames, n_bodyparts, _ = all_points_3d.shape
-
-    #     fig, mlab_points, mlab_lines = self.initialize_3d(n_tracks, n_bodyparts)
-
-    #     writer = skvideo.io.FFmpegWriter(self.video_labeled_3d_path, inputdict={'-framerate': str(fps)},
-    #                                 outputdict={'-vcodec': 'libx264', '-pix_fmt': 'yuv420p', '-preset': 'superfast', '-crf': '23'})
-
-    #     for frame_idx in trange(n_frames, ncols=100, desc='3D Visualizing... ', unit='frames'):
-    #         img = self.get_image_3d(fig, all_points_3d[:, frame_idx], mlab_points, mlab_lines, show_lines=True)
-    #         writer.writeFrame(img)
-
-    #     writer.close()
-    #     mlab.close(fig)
 
     def generate_video_3d(self, source: str = 'original', fps: int = 25, start_frame_idx: int = 0, end_frame_idx: int = None):
         assert source in ['original', 'optimized'], f'Invalid data source: {source}'
@@ -187,7 +166,7 @@ class Visualizer3D:
         assert source in ['original', 'optimized'], f'Invalid data source: {source}'
         if source == 'optimized':
             self.video_labeled_3d_path = self.video_labeled_3d_path.with_name('optimized.mp4')
-            self.video_combined_path = self.video_combined_path.with_name('combined_optimized.mp4')
+            self.video_combined_path = self.video_combined_path.with_name('optimized_combined.mp4')
 
         caps_2d = []
         for video2d_path in sorted(self.videos_2d_dir.glob(f"*.mp4")):
