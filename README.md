@@ -1,10 +1,13 @@
 # MarmoPose
 
-Welcome to MarmoPose 1.0 !  
-A comprehensive multi-marmoset 3D pose tracking system.
+Welcome to MarmoPose, a comprehensive multi-marmoset real-time 3D pose tracking system.  
+
+<div align="center">
+  <img src="resources/marmopose.jpg" alt="MarmoPose Demo" width="600"/>
+</div>
 
 
-# Installation
+## Installation
 
 Currently MarmoPose works on Windows and Linux. You can follow these steps for the preparation
 
@@ -17,7 +20,7 @@ conda create --name marmopose python=3.8
 conda activate marmopose
 ```
 
-**Step 2.** Install PyTorch following [official instructions](https://pytorch.org/get-started/locally/), e.g.
+**Step 2.** Install PyTorch following [official instructions](https://pytorch.org/get-started/locally/). Here is the recommended method.
 
 ```shell
 conda install pytorch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 pytorch-cuda=12.1 -c pytorch -c nvidia
@@ -35,7 +38,7 @@ pip install mmdeploy==1.3.1
 pip install mmdeploy-runtime-gpu==1.3.1
 ```
 
-**Step 4.** Install necessary
+**Step 4.** Install other dependencies
 
 ```shell
 pip install --upgrade Pillow h5py seaborn scikit-video mayavi vtk==9.2.6
@@ -44,6 +47,10 @@ pip install --upgrade Pillow h5py seaborn scikit-video mayavi vtk==9.2.6
 **Step 5.** If you would like to run TensorRT deployed model, refer to [MMDeploy](https://mmdeploy.readthedocs.io/en/latest/get_started.html).
 
 
-# Usage
+## Usage
 
-Download models from [MarmoPose1.0](https://cloud.tsinghua.edu.cn/d/c9c1425288a643ee814c/) and follow `run.py`.
+**Step 1.** Download models and demos from [MarmoPose1.0](https://cloud.tsinghua.edu.cn/d/c9c1425288a643ee814c/), and place them in the same directory as `run.py`. Alternatively, store them in another directory and specify it in the config file.
+
+**Step 2.** Prepare aligned calibration videos, run calibration.
+
+**Step 3.** Prepare aligned videos for analysis, run prediction, triangulation and visualization (if necessary). Refer to code and comments in the `run.py`.

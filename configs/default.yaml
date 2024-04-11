@@ -44,7 +44,7 @@ triangulation:
 optimization:
   do_optimize: false
   n_deriv_smooth: 1
-  scale_smooth: 2
+  scale_smooth: 1
   scale_length: 2
   scale_length_weak: 1
 

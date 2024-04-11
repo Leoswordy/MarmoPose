@@ -514,7 +514,7 @@ class CameraGroup:
                 # TODO: Optimize this, it is used to avoid nan in init camera matrix, better calibration video could avoid this
                 # matrix[0][0] = matrix[1][1] = 1078.0
                 # matrix = np.nan_to_num(matrix, nan=1000.0)
-                print(matrix)
+                # print(matrix)
                 # ======================================================================
 
                 camera.set_camera_matrix(matrix)
