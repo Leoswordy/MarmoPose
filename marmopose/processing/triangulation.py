@@ -71,7 +71,7 @@ class Reconstructor3D:
 
         if self.config.triangulation['dae_enable']:
             points_3d_filled = self.fill_with_dae(points_3d)
-            logger.info(f'Filled missing values with Denoising Autoencoder')
+            logger.info(f'Filled missing values with denoising autoencoder')
         else:
             points_3d_filled = points_3d
 

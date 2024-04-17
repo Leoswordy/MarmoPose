@@ -43,7 +43,7 @@ def save_points_bboxes_2d_h5(points: np.ndarray, bboxes: np.ndarray, name: str, 
             logger.info(f'Overwriting existing {points_name} in {file_path}')
         if bboxes_name in f:
             del f[bboxes_name]
-            logger.info(f'Overwriting existing {points_name} in {file_path}')
+            logger.info(f'Overwriting existing {bboxes_name} in {file_path}')
 
         f.create_dataset(points_name, data=points)
         f.create_dataset(bboxes_name, data=bboxes)

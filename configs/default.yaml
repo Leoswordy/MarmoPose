@@ -1,8 +1,8 @@
 directory:
-  project: 'demos/pair'
-  det_model: 'models/detection_model'
-  pose_model: 'models/pose_model'
-  dae_model: 'models/dae_model'
+  project: '../demos/pair'
+  det_model: '../models/detection_model'
+  pose_model: '../models/pose_model'
+  dae_model: '../models/dae_model'
 
 
 animal:

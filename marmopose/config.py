@@ -9,6 +9,9 @@ logger = logging.getLogger(__name__)
 
 class Config:
     DEFAULT_CONFIG = {
+        'animal':{
+            'label_mapping': None
+        },
         'calibration': {
             'board_type': 'checkerboard',
             'board_square_side_length': 45,
@@ -34,7 +37,7 @@ class Config:
             'scale_length': 2,
             'scale_length_weak': 1
         },
-        'sub_directory': {
+        'sub_path': {
             'calibration': 'calibration',
             'points_2d': 'points_2d',
             'points_3d': 'points_3d',
@@ -85,7 +88,8 @@ class Config:
     
     def build_directory(self) -> None:
         project_dir = Path(self.config['directory']['project'])
-        for key, rel_path in self.config['sub_directory'].items():
+        self.config['sub_directory'] = {}
+        for key, rel_path in self.config['sub_path'].items():
             full_path = project_dir / rel_path
             self.config['sub_directory'][key] = str(full_path)
             if rel_path not in ['calibration', 'videos_raw']:
