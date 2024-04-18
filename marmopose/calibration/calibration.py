@@ -29,10 +29,13 @@ class Calibrator:
     
     
     def calibrate(self):
-        cam_names, video_list = self.get_video_list(self.calib_video_paths)
-        board = self.get_calibration_board(self.config)
-
         if not self.output_path.exists():
+            if not self.calib_video_paths:
+                raise FileNotFoundError(f'No calibration videos or detected boards found in: {self.calibration_path}')
+            
+            cam_names, video_list = self.get_video_list(self.calib_video_paths)
+            board = self.get_calibration_board(self.config)
+
             detected_file = self.calibration_path / 'detected_boards.pickle'
             if detected_file.exists():
                 logger.info(f'Loading detected boards from: {detected_file}')
@@ -52,7 +55,7 @@ class Calibrator:
                                  n_iters=10, start_mu=15, end_mu=1, 
                                  max_nfev=200, ftol=1e-4, 
                                  n_samp_iter=200, n_samp_full=1000, 
-                                 error_threshold=2.5, verbose=True)
+                                 error_threshold=2.5)
         else:
             logger.info(f'Calibration result already exists in: {self.output_path}')
             cgroup = CameraGroup.load_from_json(str(self.output_path))
@@ -193,7 +196,7 @@ def capture_event(event: int, x: int, y: int, flags: int, params: Tuple[List[Tup
     cam_coordinates, current_point_idx = params
     if event == cv2.EVENT_LBUTTONDOWN:
         point_types = ['original point', 'x-axis point', 'y-axis point']
-        print(f'{point_types[current_point_idx[0]]}: ({x}, {y})')
+        logger.info(f'{point_types[current_point_idx[0]]}: ({x}, {y})')
         cam_coordinates.append((x, y))
         current_point_idx[0] += 1
 
@@ -209,7 +212,7 @@ def capture_coordinates(cap: cv2.VideoCapture, cam_name: str) -> List[Tuple[int,
     Returns:
         List of coordinates captured from the video frame.
     """
-    print(f'\nSetting axes for {cam_name}...')
+    logger.info(f'Setting axes for {cam_name}...')
     ret, img = cap.read()
     if not ret:
         return []
