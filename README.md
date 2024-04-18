@@ -93,7 +93,7 @@ Currently, we provide 6 pretrained models tailored for different scenarios. The 
 ### Demos and Examples
 
 We provide 5 example notebooks and corresponding demos to help you get started. Please use the default configuration file provided in the `configs` directory. For each project, place calibrated camera parameters or videos for calibration in the `calibration` directory. Place raw videos for analysis in the `videos_raw` directory.
-> **Note**: Calibration only needs to be done once as long as the camera setup is not changed, refer to `examples/calibrate.ipynb`
+> **Note**: Calibration only needs to be done once as long as the camera setup is not changed, refer to `examples/calibrate.ipynb`.
 
 #### `1 marmoset`
 For scenarios containing 1 marmoset, refer to `examples/single.ipynb` and `demos/single`.
