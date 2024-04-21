@@ -123,9 +123,7 @@ It is essential to first label new data accurately. We recommend using [SLEAP](h
 2D prediction models in MarmoPose are trained with data in [COCO format](https://cocodataset.org/#format-data). After labeling new data with SLEAP, you must convert it to COCO format. Refer to `tools/sleap2coco.py` to for this conversion process.
 
 
-### Fine-tune models
-
-To fine-tune the detection model, following these steps:
+### Fine-tune detection model
 
 1. Modify these parameters in  `tools/train_config/detection_config.py`:
     - `data_root`: Path to new training data
@@ -142,7 +140,7 @@ python tools/train.py tools/train_config/detection_config.py --resume models/det
 > **Note**: Select the checkpoint that best matches your scenario, e.g., `detection_model` for 1 or 2 marmosets, `detection_model_family` for 4 marmosets. For other number of marmosets, it will load the backbone and neck weights from the chosen checkpoint, and initialize the head weights randomly.
 
 
-To fine-tune the pose model, following these steps:
+### Fine-tune pose model
 
 1. Modify these parameters in  `tools/train_config/pose_config.py`:
     - `data_root`: Path to new training data
