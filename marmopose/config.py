@@ -52,9 +52,9 @@ class Config:
 
         self.override_config(self.config, **kwargs)
 
-        self.build_directory()
-
         self.validate_paths()
+
+        self.build_directory()
 
     def load_config(self, config_path: str) -> dict:
         config_file = Path(config_path)
@@ -88,6 +88,7 @@ class Config:
     
     def build_directory(self) -> None:
         project_dir = Path(self.config['directory']['project'])
+        
         self.config['sub_directory'] = {}
         for key, rel_path in self.config['sub_path'].items():
             full_path = project_dir / rel_path
@@ -97,9 +98,11 @@ class Config:
                     full_path.mkdir(parents=True, exist_ok=True)
     
     def validate_paths(self) -> None:
-        for value in self.config['directory'].values():
-            if not Path(value).exists():
+        for key, value in self.config['directory'].items():
+            path = Path(value)
+            if not path.exists():
                 raise FileNotFoundError(f'Directory not found: {value}')
+            self.config['directory'][key] = str(path.resolve())
 
     @property
     def directory(self):

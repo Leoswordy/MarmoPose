@@ -1,5 +1,6 @@
 import json
 import queue
+import logging
 from collections import Counter, defaultdict
 from itertools import combinations
 from typing import Any, Dict, List, Tuple
@@ -15,6 +16,8 @@ from scipy.sparse import dok_matrix
 
 from marmopose.calibration.boards import extract_points, extract_rtvecs, merge_rows
 from marmopose.utils.helpers import get_video_params
+
+logger = logging.getLogger(__name__)
 
 
 def triangulate_SVD(points: List[Tuple[float, float]], camera_mats: List[np.ndarray]) -> np.ndarray:
@@ -495,7 +498,7 @@ class CameraGroup:
 
     # TODO: Refractor the following functions
     def calibrate_rows(self, all_rows, board, 
-                       init_intrinsics=True, init_extrinsics=True, verbose=True, **kwargs):
+                       init_intrinsics=True, init_extrinsics=True, **kwargs):
         assert len(all_rows) == len(self.cameras), "Number of camera detections does not match number of cameras"
 
         for rows, camera in zip(all_rows, self.cameras):
@@ -527,16 +530,16 @@ class CameraGroup:
 
         if init_extrinsics:
             rtvecs = extract_rtvecs(merged)
-            if verbose: pprint(get_connections(rtvecs, self.get_names()))
+            logger.debug(get_connections(rtvecs, self.get_names()))
             rvecs, tvecs = get_initial_extrinsics(rtvecs, self.get_names())
             self.set_rotations(rvecs)
             self.set_translations(tvecs)
 
-        error = self.bundle_adjust_iter(imgp, extra, verbose=verbose, **kwargs)
+        error = self.bundle_adjust_iter(imgp, extra, **kwargs)
         self.metadata['error'] = error
     
     def average_error(self, p2ds, median=False):
-        p3ds = self.triangulate(p2ds)
+        p3ds = self.triangulate(p2ds, verbose=False)
         errors = self.reprojection_error(p3ds, p2ds, mean=True)
         if median:
             return np.median(errors)
@@ -547,8 +550,7 @@ class CameraGroup:
                            n_iters=10, start_mu=15, end_mu=1,
                            max_nfev=200, ftol=1e-4,
                            n_samp_iter=100, n_samp_full=1000,
-                           error_threshold=0.3,
-                           verbose=False):
+                           error_threshold=0.3):
         """Given an CxNx2 array of 2D points,
         where N is the number of points and C is the number of cameras,
         this performs iterative bundle adjustsment to fine-tune the parameters of the cameras.
@@ -570,18 +572,16 @@ class CameraGroup:
                                       n_samp=n_samp_full)
         error = self.average_error(p2ds, median=True)
 
-        if verbose:
-            print('error: ', error)
+        logger.info(f'error: {error:.3f}')
 
         mus = np.exp(np.linspace(np.log(start_mu), np.log(end_mu), num=n_iters))
 
-        if verbose:
-            print('n_samples: {}'.format(n_samp_iter))
+        logger.info(f'n_samples: {n_samp_iter}')
 
         for i in range(n_iters):
             p2ds, extra = resample_points(p2ds_full, extra_full,
                                           n_samp=n_samp_full)
-            p3ds = self.triangulate(p2ds)
+            p3ds = self.triangulate(p2ds, verbose=False)
             errors_full = self.reprojection_error(p3ds, p2ds, mean=False)
             errors_norm = self.reprojection_error(p3ds, p2ds, mean=True)
 
@@ -604,23 +604,22 @@ class CameraGroup:
             if error < error_threshold:
                 break
 
-            if verbose:
-                pprint(error_dict)
-                print('error: {:.2f}, mu: {:.1f}, ratio: {:.3f}'.format(error, mu, np.mean(good)))
+            logger.debug(error_dict)
+            logger.info(f'error: {error:.3f}, mu: {mu:.3f}, ratio: {np.mean(good):.3f}')
 
             self.bundle_adjust(p2ds_samp, extra_samp,
                                loss='linear', ftol=ftol,
                                max_nfev=max_nfev,
-                               verbose=verbose)
+                               verbose=True)
 
         p2ds, extra = resample_points(p2ds_full, extra_full,
                                       n_samp=n_samp_full)
-        p3ds = self.triangulate(p2ds)
+        p3ds = self.triangulate(p2ds, verbose=False)
         errors_full = self.reprojection_error(p3ds, p2ds, mean=False)
         errors_norm = self.reprojection_error(p3ds, p2ds, mean=True)
         error_dict = get_error_dict(errors_full)
-        if verbose:
-            pprint(error_dict)
+
+        logger.debug(error_dict)
 
         max_error = 0
         min_error = 0
@@ -635,18 +634,16 @@ class CameraGroup:
         self.bundle_adjust(p2ds[:, good], extra_good,
                            loss='linear',
                            ftol=ftol, max_nfev=max(200, max_nfev),
-                           verbose=verbose)
+                           verbose=True)
 
         error = self.average_error(p2ds, median=True)
 
-        p3ds = self.triangulate(p2ds)
+        p3ds = self.triangulate(p2ds, verbose=False)
         errors_full = self.reprojection_error(p3ds, p2ds, mean=False)
         error_dict = get_error_dict(errors_full)
-        if verbose:
-            pprint(error_dict)
 
-        if verbose:
-            print('error: ', error)
+        logger.debug(error_dict)
+        logger.info(f'error: {error:.3f}')
 
         return error
     
@@ -830,7 +827,7 @@ class CameraGroup:
             "number of cameras in CameraGroup does not " \
             "match number of cameras in 2D points given"
 
-        p3ds = self.triangulate(p2ds)
+        p3ds = self.triangulate(p2ds, verbose=False)
 
         if extra is not None:
             ids = extra['ids_map']
