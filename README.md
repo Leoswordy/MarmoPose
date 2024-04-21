@@ -41,7 +41,7 @@ pip install mmdeploy-runtime-gpu==1.3.1
 **Step 4.** Install other dependencies
 
 ```shell
-pip install --upgrade Pillow ipykernel h5py seaborn scikit-video mayavi vtk==9.2.6
+pip install --upgrade Pillow ipykernel h5py seaborn scikit-video mayavi vtk==9.2.6 albumentations
 ```
 
 **Step 5.** If you would like to run TensorRT deployed model, refer to [MMDeploy](https://mmdeploy.readthedocs.io/en/latest/get_started.html).
@@ -114,12 +114,51 @@ For scenarios involving 4(or 3, or 2) marmosets where only a subset needs to be 
 > **Note**: This demo is in a complex scenario (family marmosets with young, and more obstacles in the home cage). The training data from **Marmoset3K** does **NOT** cover these scenarios. Although preliminary results can be obtained with the `detection_model_family` and `pose_model`, the performance may not be satisfactory (You may see that current version of **MarmoPose** is not effective in this demo, that's because the landmarks of the `green_head_marmoset` are invisible at most of the time and views, making it difficult to detect and assign label. Additionally, new poses not covered in the training data are currently not recognized well.). More pose data is necessary to finetune the models.
 
 
-## Finetune models
+## Fine-tune models
 
 ### Label data
 
-_Coming soon..._
+It is essential to first label new data accurately. We recommend using [SLEAP](https://sleap.ai/) for this purpose. Detailed instructions for labeling are provided in `tools/Data Annotation Guide.pdf`.
 
-### Finetune model
+2D prediction models in MarmoPose are trained with data in [COCO format](https://cocodataset.org/#format-data). After labeling new data with SLEAP, you must convert it to COCO format. Refer to `tools/sleap2coco.py` to for this conversion process.
 
-_Coming soon..._
+
+### Fine-tune models
+
+To fine-tune the detection model, following these steps:
+
+1. Modify these parameters in  `tools/train_config/detection_config.py`:
+    - `data_root`: Path to new training data
+    - `dataset.metainfo.classes` in `train_dataloader` and `val_dataloader`: The number and names should match the categories in the converted COCO dataset
+    - `max_epochs`: Based on the size of new dataset
+    - `others (optional)`: In general, keep other settings unchanged. For additional customization options, refer to [MMDetection Train](https://mmdetection.readthedocs.io/en/latest/user_guides/train.html#train-with-customized-datasets)
+
+2. Run the following command to continue training from a checkpoint
+
+```shell
+python tools/train.py tools/train_config/detection_config.py --resume models/detection_model_family/best.pth --work-dir data/detection_model_family_finetune
+```
+
+> **Note**: Select the checkpoint that best matches your scenario, e.g., `detection_model` for 1 or 2 marmosets, `detection_model_family` for 4 marmosets. For other number of marmosets, it will load the backbone and neck weights from the chosen checkpoint, and initialize the head weights randomly.
+
+
+To fine-tune the pose model, following these steps:
+
+1. Modify these parameters in  `tools/train_config/pose_config.py`:
+    - `data_root`: Path to new training data
+    - `max_epochs`: Based on the size of new dataset
+    - `others (optional)`: In general, keep other settings unchanged. For additional customization options, refer to [MMPose Train](https://mmpose.readthedocs.io/en/latest/user_guides/train_and_test.html)
+
+2. Run the following command to resume training from a checkpoint
+
+```shell
+python tools/train.py tools/train_config/pose_config.py --resume models/pose_model/best.pth --work-dir data/pose_model_finetune
+```
+
+> **Note**: Remove `--resume` if you want to start training from scratch.
+
+
+## Other Preprocessing Tools
+
+When preparing videos recorded by current monitoring cameras in THBI, use `tools/video_converter.py` to convert and align the videos.
+
