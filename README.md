@@ -127,6 +127,7 @@ It is essential to first label new data accurately. We recommend using [SLEAP](h
 
 1. Modify these parameters in  `tools/train_config/detection_config.py`:
     - `data_root`: Path to new training data
+    - `model.bbox_head.num_classes`: The number of marmosets in the new dataset
     - `dataset.metainfo.classes` in `train_dataloader` and `val_dataloader`: The number and names should match the categories in the converted COCO dataset
     - `max_epochs`: Based on the size of new dataset
     - `others (optional)`: In general, keep other settings unchanged. For additional customization options, refer to [MMDetection Train](https://mmdetection.readthedocs.io/en/latest/user_guides/train.html#train-with-customized-datasets)
