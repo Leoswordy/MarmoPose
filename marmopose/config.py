@@ -9,9 +9,6 @@ logger = logging.getLogger(__name__)
 
 class Config:
     DEFAULT_CONFIG = {
-        'animal':{
-            'label_mapping': None
-        },
         'calibration': {
             'board_type': 'checkerboard',
             'board_square_side_length': 45,
@@ -37,7 +34,7 @@ class Config:
             'scale_length': 2,
             'scale_length_weak': 1
         },
-        'sub_path': {
+        'sub_directory': {
             'calibration': 'calibration',
             'points_2d': 'points_2d',
             'points_3d': 'points_3d',
@@ -52,9 +49,9 @@ class Config:
 
         self.override_config(self.config, **kwargs)
 
-        self.validate_paths()
-
         self.build_directory()
+
+        self.validate_paths()
 
     def load_config(self, config_path: str) -> dict:
         config_file = Path(config_path)
@@ -79,7 +76,7 @@ class Config:
         # TODO: Sub-dict might have the same key, handle it
         for key, value in kwargs.items():
             if key in config:
-                logger.info(f'Overriding config | {key}: {config[key]} -> {value}')
+                logger.info(f'*** Overriding config *** | {key}: {config[key]} -> {value}')
                 config[key] = value
             else:
                 for sub_value in config.values():
@@ -88,9 +85,7 @@ class Config:
     
     def build_directory(self) -> None:
         project_dir = Path(self.config['directory']['project'])
-        
-        self.config['sub_directory'] = {}
-        for key, rel_path in self.config['sub_path'].items():
+        for key, rel_path in self.config['sub_directory'].items():
             full_path = project_dir / rel_path
             self.config['sub_directory'][key] = str(full_path)
             if rel_path not in ['calibration', 'videos_raw']:
@@ -98,12 +93,14 @@ class Config:
                     full_path.mkdir(parents=True, exist_ok=True)
     
     def validate_paths(self) -> None:
-        for key, value in self.config['directory'].items():
-            path = Path(value)
-            if not path.exists():
+        for value in self.config['directory'].values():
+            if not Path(value).exists():
                 raise FileNotFoundError(f'Directory not found: {value}')
-            self.config['directory'][key] = str(path.resolve())
 
+    @property
+    def project_path(self):
+        return self.config['directory']['project']
+    
     @property
     def directory(self):
         return self.config['directory']

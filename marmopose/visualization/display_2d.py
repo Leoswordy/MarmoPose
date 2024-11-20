@@ -1,14 +1,16 @@
 import logging
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import av
 import cv2
-import numpy as np
 import skvideo.io
+import numpy as np
 from tqdm import trange
 
 from marmopose.config import Config
 from marmopose.utils.data_io import load_points_bboxes_2d_h5
-from marmopose.utils.helpers import get_color_list, VideoStreamThread
+from marmopose.utils.helpers import get_color_list
 
 logger = logging.getLogger(__name__)
 
@@ -39,29 +41,37 @@ class Visualizer2D:
         video_paths = sorted(self.videos_raw_dir.glob(f"*.mp4"))
         all_points_with_score_2d, all_bboxes = load_points_bboxes_2d_h5(self.points_2d_path)
 
-        for video_path, points_with_score_2d, bboxes in zip(video_paths, all_points_with_score_2d, all_bboxes):
-            output_path = self.videos_labeled_2d_dir / video_path.name
-            self.render_video_with_pose(video_path, points_with_score_2d, bboxes, output_path)
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for video_path, points_with_score_2d, bboxes in zip(video_paths, all_points_with_score_2d, all_bboxes):
+                output_path = self.videos_labeled_2d_dir / video_path.name
+                future = executor.submit(self.render_video_with_pose, video_path, points_with_score_2d, bboxes, output_path)
+                futures.append(future)
+            for future in as_completed(futures):
+                future.result()
     
     def render_video_with_pose(self, video_path: Path, points_with_score_2d: np.ndarray, bboxes: np.ndarray, output_path: Path):
-        cap = VideoStreamThread(str(video_path))
-        cap.start()
-        fps, n_frames = cap.get_param('fps'), cap.get_param('frames')
+        input_container = av.open(video_path)
+        input_stream = input_container.streams.video[0]
+        input_stream.thread_type = 'AUTO'
 
-        writer = skvideo.io.FFmpegWriter(output_path, inputdict={'-framerate': str(fps)}, 
+        writer = skvideo.io.FFmpegWriter(output_path, inputdict={'-framerate': str(input_stream.average_rate)},
                                          outputdict={'-vcodec': 'libx264', '-pix_fmt': 'yuv420p', '-preset': 'superfast', '-crf': '23'})
 
-        for frame_idx in trange(n_frames, ncols=100, desc=f'2D Visualizing {output_path.stem}', unit='frames'):
-            frame = cap.read()
+        n_frames = input_stream.frames
+        for frame_idx, frame in zip(trange(n_frames, ncols=100, desc=f'2D Visualizing {output_path.stem}', unit='frames'), input_container.decode(video=0)):
             # TODO: Try to add score to the visualization
-            points_2d = points_with_score_2d[:, frame_idx, :, :2] #(n_tracks, n_bodyparts, 2)
-            bbox = bboxes[:, frame_idx] #(n_tracks, 4)
-            img = self.draw_pose_on_image(frame, points_2d, bbox)
-            writer.writeFrame(img)
+            points_2d = points_with_score_2d[:, frame_idx, :, :2]  # (n_tracks, n_bodyparts, 2)
+            bbox = bboxes[:, frame_idx]  # (n_tracks, 4)
 
-        cap.stop()
+            img = frame.to_ndarray(format='rgb24')
+            img = self.draw_pose_on_image(img, points_2d, bbox)
+
+            writer.writeFrame(img)
+        
+        input_container.close()
         writer.close()
-    
+
     def draw_pose_on_image(self, img: np.ndarray, points_2d: np.ndarray, bboxes: np.ndarray) -> None:
         for track_idx, (points, bbox) in enumerate(zip(points_2d, bboxes)):
             # Draw bounding boxes
@@ -71,7 +81,7 @@ class Visualizer2D:
             # Draw points
             valid_points = points[~np.isnan(points).any(axis=-1)].astype(int)
             for x, y in valid_points:
-                cv2.circle(img, (x, y), 7, self.track_color_list[track_idx], -1)
+                cv2.circle(img, (x, y), 6, self.track_color_list[track_idx], -1)
             # Draw lines
             self.draw_lines(img, points)
 
@@ -83,6 +93,4 @@ class Visualizer2D:
                 if np.any(np.isnan(points[[a,b]])):
                     continue
                 pa, pb = tuple(map(int, points[a])), tuple(map(int, points[b]))
-                cv2.line(img, pa, pb, self.skeleton_color_list[idx], 3)
-
-
+                cv2.line(img, pa, pb, self.skeleton_color_list[idx], 2)

@@ -2,7 +2,7 @@ import pickle
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
 import json
 
 import cv2
@@ -29,13 +29,10 @@ class Calibrator:
     
     
     def calibrate(self):
-        if not self.output_path.exists():
-            if not self.calib_video_paths:
-                raise FileNotFoundError(f'No calibration videos or detected boards found in: {self.calibration_path}')
-            
-            cam_names, video_list = self.get_video_list(self.calib_video_paths)
-            board = self.get_calibration_board(self.config)
+        cam_names, video_list = self.get_video_list(self.calib_video_paths)
+        board = self.get_calibration_board(self.config)
 
+        if not self.output_path.exists():
             detected_file = self.calibration_path / 'detected_boards.pickle'
             if detected_file.exists():
                 logger.info(f'Loading detected boards from: {detected_file}')
@@ -53,9 +50,9 @@ class Calibrator:
             cgroup.calibrate_rows(all_rows, board, 
                                  init_intrinsics=True, init_extrinsics=True, 
                                  n_iters=10, start_mu=15, end_mu=1, 
-                                 max_nfev=200, ftol=1e-4, 
-                                 n_samp_iter=200, n_samp_full=1000, 
-                                 error_threshold=2.5)
+                                 max_nfev=200, ftol=1e-5, 
+                                 n_samp_iter=500, n_samp_full=1000, 
+                                 error_threshold=2.5, verbose=True)
         else:
             logger.info(f'Calibration result already exists in: {self.output_path}')
             cgroup = CameraGroup.load_from_json(str(self.output_path))
@@ -165,7 +162,7 @@ def construct_transformation_matrix(camera_group, axes):
     axes_2d = np.array([axes[cam_name] for cam_name in cam_names], dtype=np.float32)
     
     sub_camera_group = camera_group.subset_cameras_names(cam_names)
-    axes_3d = sub_camera_group.triangulate(axes_2d, undistort=True, verbose=False) - offset
+    axes_3d = sub_camera_group.triangulate(axes_2d, undistort=True) - offset
 
     new_x_axis = axes_3d[1] - axes_3d[0]
     new_y_axis = orthogonalize_vector(axes_3d[2] - axes_3d[0], new_x_axis)
@@ -196,7 +193,7 @@ def capture_event(event: int, x: int, y: int, flags: int, params: Tuple[List[Tup
     cam_coordinates, current_point_idx = params
     if event == cv2.EVENT_LBUTTONDOWN:
         point_types = ['original point', 'x-axis point', 'y-axis point']
-        logger.info(f'{point_types[current_point_idx[0]]}: ({x}, {y})')
+        print(f'{point_types[current_point_idx[0]]}: ({x}, {y})')
         cam_coordinates.append((x, y))
         current_point_idx[0] += 1
 
@@ -212,7 +209,7 @@ def capture_coordinates(cap: cv2.VideoCapture, cam_name: str) -> List[Tuple[int,
     Returns:
         List of coordinates captured from the video frame.
     """
-    logger.info(f'Setting axes for {cam_name}...')
+    print(f'\nSetting axes for {cam_name}...')
     ret, img = cap.read()
     if not ret:
         return []

@@ -7,20 +7,20 @@ Welcome to MarmoPose, a comprehensive multi-marmoset real-time 3D pose tracking 
 </div>
 
 
-## Installation
+# Installation Guide
 
-Currently MarmoPose works on Windows and Linux. You can follow these steps for the preparation
+MarmoPose currently supports both Windows and Linux. Follow the steps below to set up your environment.
 
 **Step 0.** Download and install Miniconda from the [official website](https://docs.conda.io/en/latest/miniconda.html).
 
-**Step 1.** Create a conda environment and activate it.
+**Step 1.** Create a new Conda environment and activate it.
 
 ```shell
 conda create --name marmopose python=3.8
 conda activate marmopose
 ```
 
-**Step 2.** Install PyTorch following [official instructions](https://pytorch.org/get-started/locally/). Here is the recommended method.
+**Step 2.** Follow the [official PyTorch installation instructions](https://pytorch.org/get-started/locally/). The recommended installation command is:
 
 ```shell
 conda install pytorch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 pytorch-cuda=12.1 -c pytorch -c nvidia
@@ -31,20 +31,25 @@ conda install pytorch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 pytorch-cuda=
 ```shell
 pip install -U openmim
 mim install mmengine
-mim install "mmcv>=2.0.1"
-mim install "mmdet>=3.1.0"
-mim install "mmpose>=1.1.0"
+mim install mmcv==2.1.0
+mim install mmdet==3.2.0
+mim install mmpose==1.3.1
 pip install mmdeploy==1.3.1
 pip install mmdeploy-runtime-gpu==1.3.1
 ```
 
-**Step 4.** Install other dependencies
+**Step 4.** Install other dependencies.
 
 ```shell
-pip install --upgrade Pillow ipykernel h5py seaborn scikit-video mayavi vtk==9.2.6 albumentations
+python -m pip install Pillow h5py seaborn scikit-video av open3d
 ```
 
-**Step 5.** If you would like to run TensorRT deployed model, refer to [MMDeploy](https://mmdeploy.readthedocs.io/en/latest/get_started.html).
+**Step 5.** If you want to run TensorRT-deployed models (for realtime processing), follow these steps:
+1. Install CUDA 11.8 by following the [CUDA installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html).
+2. Install TensorRT 8.6 following the **Zip File Installation** section in [TensorRT installation guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html).
+
+
+**Step 6.** To deploy new models, refer to the [MMDeploy](https://mmdeploy.readthedocs.io/en/latest/get_started.html).
 
 
 ## Usage
@@ -92,27 +97,31 @@ Currently, we provide 6 pretrained models tailored for different scenarios. The 
 
 ### Demos and Examples
 
-We provide 5 example notebooks and corresponding demos to help you get started. Please use the default configuration file provided in the `configs` directory. For each project, place calibrated camera parameters or videos for calibration in the `calibration` directory. Place raw videos for analysis in the `videos_raw` directory.
+We provide examples and corresponding demos to help you get started. Please use the default configuration file provided in the `configs` directory. For each project, place calibrated camera parameters or videos for calibration in the `calibration` directory. Place raw videos for analysis in the `videos_raw` directory.
 > **Note**: Calibration only needs to be done once as long as the camera setup is not changed, refer to `examples/calibrate.ipynb`.
 
-#### `1 marmoset`
-For scenarios containing 1 marmoset, refer to `examples/single.ipynb` and `demos/single`.
+#### `2 marmosets` 
+> We highly recommend running this demo first, as the notebook includes detailed comments on the configuration, processing steps, and functions.
 
-#### `2 marmosets`
-For scenarios containing 2 marmosets (one dyed blue), refer to `examples/pair.ipynb` and `demos/pair`.
+For scenarios containing 2 marmosets (one dyed blue), refer to `examples/demo_pair.ipynb` and `demos/pair`.
+
+#### `1 marmoset`
+For scenarios containing 1 marmoset, refer to `examples/demo_single.ipynb` and `demos/single`.
 
 #### `4 marmosets`
-For scenarios containing 4 marmosets, refer to `examples/family.ipynb` and `demos/family`. 
+For scenarios containing 4 marmosets, refer to `examples/demo_family.ipynb` and `demos/family`. 
 
 > **Note**: The training data from **Marmoset3K** does **NOT** cover scenarios with 4 marmosets. You may use the `detection_model_family` and `pose_model` for preliminary results, but these might not meet practical demands. Finetuning with new labeled data is required.
 
 #### `Track a subset of marmosets in the video`
-For scenarios involving 4(or 3, or 2) marmosets where only a subset needs to be tracked, refer to `examples/family_subset.ipynb` and `demos/family_subset`. 
+For scenarios involving 4(or 3, or 2) marmosets where only a subset needs to be tracked, refer to `examples/demo_family_subset.ipynb` and `demos/family_subset`. 
   - **Example 1** If there are 4 marmosets, 2 adults and 2 young, and the young marmosets are difficult to dye, you can choose to only track the two adults.
   - **Example 2** If there are 4 marmosets with different identifiable landmarks (e.g., new colors), but no model exists to track the new type, you may choose to label new data for finetuning the `detection_model` or track only the subset of marmosets with existing colors.
 
 > **Note**: This demo is in a complex scenario (family marmosets with young, and more obstacles in the home cage). The training data from **Marmoset3K** does **NOT** cover these scenarios. Although preliminary results can be obtained with the `detection_model_family` and `pose_model`, the performance may not be satisfactory (You may see that current version of **MarmoPose** is not effective in this demo, that's because the landmarks of the `green_head_marmoset` are invisible at most of the time and views, making it difficult to detect and assign label. Additionally, new poses not covered in the training data are currently not recognized well.). More pose data is necessary to finetune the models.
 
+#### `Realtime Processing`
+For scenarios requiring real-time processing, refer to `examples/realtime.py` and `demos/realtime`.
 
 ## Fine-tune models
 
