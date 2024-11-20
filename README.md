@@ -53,7 +53,7 @@ python -m pip install Pillow h5py seaborn scikit-video av open3d
 
 
 ## Usage
-First download the pretrained models and demos from [MarmoPose](https://cloud.tsinghua.edu.cn/d/c9c1425288a643ee814c/), and place them in the same directory as `README.md`. Alternatively, store them in another directory and specify it in the config file. For getting started, please refer to the Jupyter Notebooks in the 'examples' directory.
+First download the pretrained models and demos from [MarmoPose](https://cloud.tsinghua.edu.cn/d/e8aa5ba88815437f8dbb/), and place them in the same directory as `README.md`. Alternatively, store them in another directory and specify it in the config file. For getting started, please refer to the Jupyter Notebooks in the 'examples' directory.
 
 ### Models
 Currently, we provide 6 pretrained models tailored for different scenarios. The training data is **Marmoset3K**, containing 1527 images with one marmoset and 1646 images with two marmosets (where one is dyed blue).
