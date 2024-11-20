@@ -1,6 +1,5 @@
 import json
 import queue
-import logging
 from collections import Counter, defaultdict
 from itertools import combinations
 from typing import Any, Dict, List, Tuple
@@ -8,7 +7,6 @@ from typing import Any, Dict, List, Tuple
 import cv2
 import numpy as np
 from pprint import pprint
-from tqdm import trange
 from scipy import optimize
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.cluster.vq import whiten
@@ -17,7 +15,23 @@ from scipy.sparse import dok_matrix
 from marmopose.calibration.boards import extract_points, extract_rtvecs, merge_rows
 from marmopose.utils.helpers import get_video_params
 
-logger = logging.getLogger(__name__)
+
+def get_extrinsic_matrix(rvec: np.ndarray, tvec: np.ndarray) -> np.ndarray:
+    """
+    Constructs a transformation matrix given a rotation and translation vector.
+
+    Args:
+        rvec: Rotation vector.
+        tvec: Translation vector.
+
+    Returns:
+        The 4x4 external transformation matrix.
+    """
+    R, _ = cv2.Rodrigues(rvec)
+    M = np.eye(4)
+    M[:3, :3] = R
+    M[:3, 3] = tvec.flatten()
+    return M
 
 
 def triangulate_SVD(points: List[Tuple[float, float]], camera_mats: List[np.ndarray]) -> np.ndarray:
@@ -163,13 +177,13 @@ class Camera:
         """Apply lens distortion to a set of 2D points using pinhole camera model.
 
         Args:
-            points_2d: Input points in 2D, shape (N, 2).
+            points_2d: Input points in 2D, shape (N, 2). Normalized coordinates.
 
         Returns:
-            Distorted points in 2D, shape (N, 2).
+            Distorted points in 2D, shape (N, 2). Pixel.
         """
         reshaped_points = points_2d.reshape(-1, 1, 2)
-        homogeneous_points = np.dstack([reshaped_points, np.ones(points_2d.shape[0], 1, 1)])
+        homogeneous_points = np.dstack([reshaped_points, np.ones((reshaped_points.shape[0], 1, 1))])
         distorted_points, _ = cv2.projectPoints(homogeneous_points, np.zeros(3), np.zeros(3), self.matrix, self.distortion)
         return distorted_points.reshape(points_2d.shape)
     
@@ -177,10 +191,10 @@ class Camera:
         """Remove lens distortion from a set of 2D points using pinhole camera model.
 
         Args:
-            points_2d: Distorted points in 2D, shape (N, 2).
+            points_2d: Distorted points in 2D, shape (N, 2). Pixel.
 
         Returns:
-            Undistorted points in 2D, shape (N, 2).
+            Undistorted points in 2D, shape (N, 2). Normalized coordinates.
         """
         reshaped_points = points_2d.reshape(-1, 1, 2)
         undistorted_points = cv2.undistortPoints(reshaped_points, self.matrix, self.distortion)
@@ -193,7 +207,7 @@ class Camera:
             points_3d: Points in 3D space, shape (N, 3).
 
         Returns:
-            Points projected to 2D, shape (N, 2).
+            Points projected to 2D, shape (N, 2). Pixel.
         """
         reshaped_points = points_3d.reshape(-1, 1, 3)
         projected_points, _ = cv2.projectPoints(reshaped_points, self.rotation, self.translation, self.matrix, self.distortion)
@@ -262,7 +276,6 @@ class FisheyeCamera(Camera):
             params[8] = dist[1]
         return params
     
-
     def distort_points(self, points_2d: np.ndarray) -> np.ndarray:
         """Apply lens distortion to a set of 2D points using fisheye camera model.
 
@@ -307,12 +320,12 @@ class FisheyeCamera(Camera):
     def copy(self) -> 'FisheyeCamera':
         """Returns a copy of the current FisheyeCamera object."""
         return FisheyeCamera(name = self.get_name(), 
-                     size = self.get_size(), 
-                     matrix = self.get_camera_matrix().copy(), 
-                     distortion = self.get_distortion().copy(), 
-                     rotation = self.get_rotation().copy(), 
-                     translation = self.get_translation().copy(), 
-                     extra_distortion = self.extra_distortion)
+                             size = self.get_size(), 
+                             matrix = self.get_camera_matrix().copy(), 
+                             distortion = self.get_distortion().copy(), 
+                             rotation = self.get_rotation().copy(), 
+                             translation = self.get_translation().copy(), 
+                             extra_distortion = self.extra_distortion)
 
 
 class CameraGroup:
@@ -390,39 +403,8 @@ class CameraGroup:
                 params = get_video_params(vidname)
                 size = (params['width'], params['height'])
                 cam.set_size(size)
-    
-    def triangulate_filtered(self, points, score) -> np.ndarray:
-        """
-        points: 2D points of shape (n_cameras, 2)
-        score: Confidence score of the 2D points, shape (n_cameras,)
-        """
-        valid_idx = [i for i, pt in enumerate(points) if not np.any(np.isnan(pt))]
-
-        points = points[valid_idx]
-        camera_mats = [self.cameras[i].get_extrinsic_matrix() for i in valid_idx]
-
-        min_error = np.inf
-        best_3d_point = np.full(3, np.nan)
-
-        for r in range(2, len(points)+1):
-            for cam_indices in combinations(range(len(camera_mats)), r):
-                cam_mats_subset = [camera_mats[i] for i in cam_indices]
-                points_subset = [points[i] for i in cam_indices]
-
-                p3d = triangulate_SVD(points_subset, cam_mats_subset)
-
-                # Reproject and calculate errors for all cameras
-                p3d_repeated = p3d[np.newaxis, :] # (1, 3)
-                errors = self.reprojection_error(p3d_repeated, np.array(points)[:, np.newaxis, :], valid_idx, mean=True)
-
-                # Check if the current configuration gives a better (lower) reprojection error
-                if np.all(errors < np.inf) and errors < min_error: # TODO: adjust threshold
-                    min_error = errors
-                    best_3d_point = p3d
-
-        return best_3d_point
         
-    def triangulate(self, points_with_score_2d_flat: np.ndarray, undistort: bool = True, verbose: bool = True) -> np.ndarray:
+    def triangulate(self, points_with_score_2d_flat: np.ndarray, undistort: bool = True) -> np.ndarray:
         """Triangulate 3D points from 2D points using camera extrinsic matrices.
 
         Args:
@@ -444,19 +426,70 @@ class CameraGroup:
         n_points = points_2d_flat.shape[1]
         points_3d_flat = np.full((n_points, 3), np.nan)
 
-        progress_bar = trange(n_points, ncols=100, desc='Triangulating... ', unit='points') if verbose else range(n_points)
-        for pt_idx in progress_bar:
+        for pt_idx in range(n_points):
             sub_points = points_2d_flat[:, pt_idx, :]
             sub_scores = scores_2d[:, pt_idx]
             valid_points = ~np.isnan(sub_points[:, 0])
             if np.sum(valid_points) >= 2:
                 points_3d_flat[pt_idx] = triangulate_SVD(sub_points[valid_points], cam_mats[valid_points])
-                
-                # TODO: Exclude bbox and points with low confidence first 
-                # points_3d_flat[pt_idx] = self.triangulate_filtered(sub_points, sub_scores)
 
         return points_3d_flat
-    
+
+    def triangulate_ransac(self, points_with_score_2d_flat: np.ndarray, undistort: bool = True) -> np.ndarray:
+        """Triangulate 3D points from 2D points using exhaustive search over camera combinations.
+
+        Args:
+            points_with_score_2d_flat: 2D points of shape (n_cameras, n_points, 3).
+            undistort (optional): Whether to undistort the 2D points using camera intrinsic matrices. Defaults to True.
+
+        Returns:
+            3D points of shape (n_points, 3).
+        """
+        if points_with_score_2d_flat.shape[-1] == 3:
+            points_2d_flat, scores_2d = points_with_score_2d_flat[..., :2], points_with_score_2d_flat[..., 2]
+        else:
+            points_2d_flat, scores_2d = points_with_score_2d_flat, np.ones(points_with_score_2d_flat.shape[:-1])
+
+        if undistort:
+            points_2d_flat_undistorted = np.array([cam.undistort_points(np.copy(pt)) for pt, cam in zip(points_2d_flat, self.cameras)])
+        else:
+            points_2d_flat_undistorted = points_2d_flat
+
+        cam_mats = np.array([cam.get_extrinsic_matrix() for cam in self.cameras])
+        n_points = points_2d_flat_undistorted.shape[1]
+        points_3d_flat = np.full((n_points, 3), np.nan)
+
+        for pt_idx in range(n_points):
+            sub_points_distorted = points_2d_flat[:, pt_idx, :]
+            sub_points = points_2d_flat_undistorted[:, pt_idx, :]
+            sub_scores = scores_2d[:, pt_idx]
+            valid_points = ~np.isnan(sub_points[:, 0])
+            valid_indices = np.where(valid_points)[0]
+
+            if len(valid_indices) >= 2:
+                best_mean_error = np.inf
+                best_point_3d = None
+
+                for r in range(len(valid_indices)-1, len(valid_indices) + 1):
+                    for indices in combinations(valid_indices, r):
+                        selected_points = sub_points[list(indices), :]
+                        selected_cam_mats = cam_mats[list(indices), :, :]
+
+                        points_3d = triangulate_SVD(selected_points, selected_cam_mats)
+
+                        points_2d_reprojected = self.reproject(points_3d[np.newaxis, :])
+                        reproj_errors = np.linalg.norm(points_2d_reprojected[valid_indices, 0, :] - sub_points_distorted[valid_indices, :], axis=1)
+
+                        mean_error = np.median(reproj_errors)
+
+                        if mean_error < best_mean_error:
+                            best_mean_error = mean_error
+                            best_point_3d = points_3d
+
+                points_3d_flat[pt_idx] = best_point_3d
+
+        return points_3d_flat
+
     def reproject(self, points_3d):
         """Given an Nx3 array of 3D points, projects the points to 2D image plane.
 
@@ -498,7 +531,7 @@ class CameraGroup:
 
     # TODO: Refractor the following functions
     def calibrate_rows(self, all_rows, board, 
-                       init_intrinsics=True, init_extrinsics=True, **kwargs):
+                       init_intrinsics=True, init_extrinsics=True, verbose=True, **kwargs):
         assert len(all_rows) == len(self.cameras), "Number of camera detections does not match number of cameras"
 
         for rows, camera in zip(all_rows, self.cameras):
@@ -512,14 +545,6 @@ class CameraGroup:
                 objp, imgp = zip(*mixed)
                 matrix = cv2.initCameraMatrix2D(objp, imgp, tuple(size))
 
-
-                # ======================================================================
-                # TODO: Optimize this, it is used to avoid nan in init camera matrix, better calibration video could avoid this
-                # matrix[0][0] = matrix[1][1] = 1078.0
-                # matrix = np.nan_to_num(matrix, nan=1000.0)
-                # print(matrix)
-                # ======================================================================
-
                 camera.set_camera_matrix(matrix)
 
         for i, (row, cam) in enumerate(zip(all_rows, self.cameras)):
@@ -530,16 +555,15 @@ class CameraGroup:
 
         if init_extrinsics:
             rtvecs = extract_rtvecs(merged)
-            logger.debug(get_connections(rtvecs, self.get_names()))
             rvecs, tvecs = get_initial_extrinsics(rtvecs, self.get_names())
             self.set_rotations(rvecs)
             self.set_translations(tvecs)
 
-        error = self.bundle_adjust_iter(imgp, extra, **kwargs)
+        error = self.bundle_adjust_iter(imgp, extra, verbose=verbose, **kwargs)
         self.metadata['error'] = error
     
     def average_error(self, p2ds, median=False):
-        p3ds = self.triangulate(p2ds, verbose=False)
+        p3ds = self.triangulate(p2ds)
         errors = self.reprojection_error(p3ds, p2ds, mean=True)
         if median:
             return np.median(errors)
@@ -550,7 +574,8 @@ class CameraGroup:
                            n_iters=10, start_mu=15, end_mu=1,
                            max_nfev=200, ftol=1e-4,
                            n_samp_iter=100, n_samp_full=1000,
-                           error_threshold=0.3):
+                           error_threshold=0.3,
+                           verbose=False):
         """Given an CxNx2 array of 2D points,
         where N is the number of points and C is the number of cameras,
         this performs iterative bundle adjustsment to fine-tune the parameters of the cameras.
@@ -572,16 +597,18 @@ class CameraGroup:
                                       n_samp=n_samp_full)
         error = self.average_error(p2ds, median=True)
 
-        logger.info(f'error: {error:.3f}')
+        if verbose:
+            print('error: ', error)
 
         mus = np.exp(np.linspace(np.log(start_mu), np.log(end_mu), num=n_iters))
 
-        logger.info(f'n_samples: {n_samp_iter}')
+        if verbose:
+            print('n_samples: {}'.format(n_samp_iter))
 
         for i in range(n_iters):
             p2ds, extra = resample_points(p2ds_full, extra_full,
                                           n_samp=n_samp_full)
-            p3ds = self.triangulate(p2ds, verbose=False)
+            p3ds = self.triangulate(p2ds)
             errors_full = self.reprojection_error(p3ds, p2ds, mean=False)
             errors_norm = self.reprojection_error(p3ds, p2ds, mean=True)
 
@@ -604,22 +631,23 @@ class CameraGroup:
             if error < error_threshold:
                 break
 
-            logger.debug(error_dict)
-            logger.info(f'error: {error:.3f}, mu: {mu:.3f}, ratio: {np.mean(good):.3f}')
+            if verbose:
+                pprint(error_dict)
+                print('error: {:.2f}, mu: {:.1f}, ratio: {:.3f}'.format(error, mu, np.mean(good)))
 
             self.bundle_adjust(p2ds_samp, extra_samp,
                                loss='linear', ftol=ftol,
                                max_nfev=max_nfev,
-                               verbose=True)
+                               verbose=verbose)
 
         p2ds, extra = resample_points(p2ds_full, extra_full,
                                       n_samp=n_samp_full)
-        p3ds = self.triangulate(p2ds, verbose=False)
+        p3ds = self.triangulate(p2ds)
         errors_full = self.reprojection_error(p3ds, p2ds, mean=False)
         errors_norm = self.reprojection_error(p3ds, p2ds, mean=True)
         error_dict = get_error_dict(errors_full)
-
-        logger.debug(error_dict)
+        if verbose:
+            pprint(error_dict)
 
         max_error = 0
         min_error = 0
@@ -634,16 +662,18 @@ class CameraGroup:
         self.bundle_adjust(p2ds[:, good], extra_good,
                            loss='linear',
                            ftol=ftol, max_nfev=max(200, max_nfev),
-                           verbose=True)
+                           verbose=verbose)
 
         error = self.average_error(p2ds, median=True)
 
-        p3ds = self.triangulate(p2ds, verbose=False)
+        p3ds = self.triangulate(p2ds)
         errors_full = self.reprojection_error(p3ds, p2ds, mean=False)
         error_dict = get_error_dict(errors_full)
+        if verbose:
+            pprint(error_dict)
 
-        logger.debug(error_dict)
-        logger.info(f'error: {error:.3f}')
+        if verbose:
+            print('error: ', error)
 
         return error
     
@@ -827,7 +857,7 @@ class CameraGroup:
             "number of cameras in CameraGroup does not " \
             "match number of cameras in 2D points given"
 
-        p3ds = self.triangulate(p2ds, verbose=False)
+        p3ds = self.triangulate(p2ds)
 
         if extra is not None:
             ids = extra['ids_map']
@@ -868,24 +898,6 @@ class CameraGroup:
                 tvecs.ravel()
 
         return x0, n_cam_params
-
-
-def get_extrinsic_matrix(rvec: np.ndarray, tvec: np.ndarray) -> np.ndarray:
-    """
-    Constructs a transformation matrix given a rotation and translation vector.
-
-    Args:
-        rvec: Rotation vector.
-        tvec: Translation vector.
-
-    Returns:
-        The 4x4 transformation matrix.
-    """
-    rotmat, _ = cv2.Rodrigues(rvec)
-    M = np.eye(4)
-    M[:3, :3] = rotmat
-    M[:3, 3] = tvec.flatten()
-    return M
 
 
 # TODO: Refractor these functions, move them to appropriate modules

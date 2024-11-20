@@ -4,36 +4,36 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 from scipy import optimize
 from scipy.sparse import dok_matrix
+from tqdm import trange
 
 from marmopose.calibration.cameras import CameraGroup
 from marmopose.processing.filter import interpolate_data
-from marmopose.utils.helpers import Timer
 
 logger = logging.getLogger(__name__)
 
 
-def optimize_coordinates(config,
-                         camera_group: CameraGroup,
-                         points_3d: np.ndarray,
-                         points_with_score_2d: np.ndarray,
-                         start_frame: int = 0) -> np.ndarray:
+def optimize_coordinates(
+    config,
+    camera_group: CameraGroup,
+    points_3d: np.ndarray,
+    points_with_score_2d: np.ndarray,
+    start_frame: int = 0,
+    batch_size: int = 7500,
+) -> np.ndarray:
     """
     Optimize the 3D points by minimizing the reprojection error, smoothness error, limb length error.
 
     Args:
         config: Configuration dictionary.
-        camera_group: The camera group correponsding to the points.
-        points_3d: 3D points with shape (n_frames, n_bodyparts, 3), final channel (x, y, z)
-        points_with_score_2d: 2D points with shape (n_cams, n_frames, n_bodyparts, 3), final channel (x, y, score)
+        camera_group: The camera group corresponding to the points.
+        points_3d: 3D points with shape (n_frames, n_bodyparts, 3), final channel (x, y, z).
+        points_with_score_2d: 2D points with shape (n_cams, n_frames, n_bodyparts, 3), final channel (x, y, score).
         start_frame: Index of the first frame to optimize.
+        batch_size: Number of frames to process in each batch.
 
     Returns:
         Optimized 3D points with shape (n_frames, n_bodyparts, 3).
-
-    Example constraints:
-        [((0, 2), 30.0), ((0, 1), 30.0)], which means the length of bodypart 0-1 should be approximately 30 mm.
     """
-    timer = Timer().start()
     n_deriv_smooth = config.optimization['n_deriv_smooth']
     scale_smooth = config.optimization['scale_smooth']
     scale_length = config.optimization['scale_length']
@@ -41,40 +41,69 @@ def optimize_coordinates(config,
 
     bodypart_dist = parse_constraints(config, 'bodypart_distance')
     bodypart_dist_weak = parse_constraints(config, 'bodypart_distance_weak')
-    
+
     points_3d_prior = points_3d
     points_3d_interp = np.apply_along_axis(interpolate_data, 0, points_3d_prior)
 
-    points_3d_original, points_3d_unprocessed = points_3d_interp[:start_frame], points_3d_interp[start_frame:]
+    points_3d_original = points_3d_interp[:start_frame]
+    points_3d_unprocessed = points_3d_interp[start_frame:]
     points_with_score_2d_unprocessed = points_with_score_2d[:, start_frame:]
-    initial_params = points_3d_unprocessed.ravel()
-    logger.info(f'Optimizing {points_3d_unprocessed.shape[0]} frames, {initial_params.shape[0]} parameters in total')
-    jac_sparsity = get_jac_sparsity(points_with_score_2d_unprocessed[..., :2], n_deriv_smooth, bodypart_dist, bodypart_dist_weak)
 
-    timer.record('init')
-    result = optimize.least_squares(fun=compute_residuals, 
-                                    x0=initial_params, 
-                                    method='trf',
-                                    loss='linear',
-                                    ftol = 1e-2,
-                                    max_nfev = 7,
-                                    jac_sparsity=jac_sparsity,
-                                    verbose=2, 
-                                    args=(camera_group,
-                                          points_with_score_2d_unprocessed, 
-                                          n_deriv_smooth,
-                                          scale_smooth, 
-                                          scale_length,
-                                          scale_length_weak,
-                                          bodypart_dist,
-                                          bodypart_dist_weak))
-    points_3d_optimized = result.x.reshape(points_3d_unprocessed.shape)
-    residuals = result.fun
-    logger.info(f'Optimization finished mean residual: {np.mean(residuals):.2f}')
-    timer.record('optimize')
-    timer.show()
+    n_frames_unprocessed = points_3d_unprocessed.shape[0]
+
+    num_batches = int(np.ceil(n_frames_unprocessed / batch_size))
+
+    optimized_frames_list = []
+
+    with trange(n_frames_unprocessed, ncols=100, desc="Optimizing coordinates", unit="frames") as progress_bar:
+        for batch_idx in range(num_batches):
+            batch_start = batch_idx * batch_size
+            batch_end = min((batch_idx + 1) * batch_size, n_frames_unprocessed)
+
+            points_3d_batch = points_3d_unprocessed[batch_start:batch_end]
+            points_with_score_2d_batch = points_with_score_2d_unprocessed[:, batch_start:batch_end]
+
+            initial_params_batch = points_3d_batch.ravel()
+
+            jac_sparsity_batch = get_jac_sparsity(
+                points_with_score_2d_batch[..., :2],
+                n_deriv_smooth,
+                bodypart_dist,
+                bodypart_dist_weak,
+            )
+
+            result = optimize.least_squares(
+                fun=compute_residuals,
+                x0=initial_params_batch,
+                method='trf',
+                loss='linear',
+                ftol=1e-2,
+                max_nfev=10,
+                jac_sparsity=jac_sparsity_batch,
+                verbose=0,
+                args=(
+                    camera_group,
+                    points_with_score_2d_batch,
+                    n_deriv_smooth,
+                    scale_smooth,
+                    scale_length,
+                    scale_length_weak,
+                    bodypart_dist,
+                    bodypart_dist_weak,
+                ),
+            )
+
+            points_3d_optimized_batch = result.x.reshape(points_3d_batch.shape)
+
+            optimized_frames_list.append(points_3d_optimized_batch)
+
+            frames_processed = batch_end - batch_start
+            progress_bar.update(frames_processed)
+
+    points_3d_optimized = np.vstack(optimized_frames_list)
 
     points_3d_result = np.vstack((points_3d_original, points_3d_optimized))
+
     return points_3d_result
     
 
@@ -103,7 +132,7 @@ def get_jac_sparsity(points_2d: np.ndarray, n_deriv_smooth: int,
     n_errors_lengths = n_constraints * n_frames
     n_errors_lengths_weak = n_constraints_weak * n_frames
     n_errors = n_errors_reproj + n_errors_smooth + n_errors_lengths + n_errors_lengths_weak
-    logger.info(f'Optimizing {n_errors_reproj} reprojection errors, {n_errors_smooth} smoothness errors, {n_errors_lengths} limb length errors, {n_errors_lengths_weak} weak limb length errors')
+    logger.debug(f'Optimizing {n_errors_reproj} reprojection errors, {n_errors_smooth} smoothness errors, {n_errors_lengths} limb length errors, {n_errors_lengths_weak} weak limb length errors')
 
     sparse_jac = dok_matrix((n_errors, n_frames*n_bodyparts*3), dtype='int16')
 

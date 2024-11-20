@@ -1,8 +1,8 @@
 directory:
-  project: '../demos/pair'
-  det_model: '../models/detection_model'
-  pose_model: '../models/pose_model'
-  dae_model: '../models/dae_model'
+  project: 'demos/pair'
+  det_model: 'models/detection_model'
+  pose_model: 'models/pose_model'
+  dae_model: 'models/dae_model'
 
 
 animal:
@@ -11,12 +11,14 @@ animal:
               'leftelbow', 'rightelbow', 'lefthand', 'righthand', 
               'spinemid', 'tailbase', 'leftknee', 'rightknee', 
               'leftfoot', 'rightfoot', 'tailmid', 'tailend']
+  skip: []
 
 
 calibration:
+  n_cameras: 4
   board_size: [11, 8]
   board_square_side_length: 45 # mm
-  fisheye: true
+  fisheye: false
 
 
 visualization:
@@ -43,8 +45,8 @@ triangulation:
 
 optimization:
   do_optimize: false
-  n_deriv_smooth: 1
-  scale_smooth: 1
+  n_deriv_smooth: 3 #1
+  scale_smooth: 10 #2
   scale_length: 2
   scale_length_weak: 1
 

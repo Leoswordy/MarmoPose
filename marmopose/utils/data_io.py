@@ -43,7 +43,7 @@ def save_points_bboxes_2d_h5(points: np.ndarray, bboxes: np.ndarray, name: str, 
             logger.info(f'Overwriting existing {points_name} in {file_path}')
         if bboxes_name in f:
             del f[bboxes_name]
-            logger.info(f'Overwriting existing {bboxes_name} in {file_path}')
+            logger.info(f'Overwriting existing {points_name} in {file_path}')
 
         f.create_dataset(points_name, data=points)
         f.create_dataset(bboxes_name, data=bboxes)
@@ -126,3 +126,101 @@ def load_points_3d_h5(file_path: Path) -> np.ndarray:
     
     logger.info(f'Loaded 3D points from {file_path} with order: {keys}')
     return all_points_3d
+
+
+def init_appendable_h5(config) -> None:
+    """
+    Initializes the HDF5 file with extendable datasets for cameras and tracks.
+
+    Args:
+        config: The configuration object.
+    """
+    n_cams = config.calibration['n_cameras']
+    n_tracks = config.animal['n_tracks']
+    n_bodyparts = len(config.animal['bodyparts'])
+
+    points_2d_path = Path(config.sub_directory['points_2d']) / 'original.h5'
+    with h5py.File(points_2d_path, 'w') as f:
+        for cam_idx in range(n_cams):
+            camera_name = f'cam{cam_idx+1}'
+            points_dataset_name = f'{camera_name}_points'
+            bboxes_dataset_name = f'{camera_name}_bboxes'
+
+            f.create_dataset(points_dataset_name,
+                             shape=(n_tracks, 0, n_bodyparts, 3),
+                             maxshape=(n_tracks, None, n_bodyparts, 3),
+                             chunks=(n_tracks, 1, n_bodyparts, 3),
+                             dtype='float32')
+            f.create_dataset(bboxes_dataset_name,
+                             shape=(n_tracks, 0, 4),
+                             maxshape=(n_tracks, None, 4),
+                             chunks=(n_tracks, 1, 4),
+                             dtype='float32')
+
+    points_3d_path = Path(config.sub_directory['points_3d']) / 'original.h5'
+    with h5py.File(points_3d_path, 'w') as f:
+        for track_idx in range(n_tracks):
+            track_name = f'track_{track_idx+1}'
+            f.create_dataset(track_name,
+                             shape=(0, n_bodyparts, 3),
+                             maxshape=(None, n_bodyparts, 3),
+                             chunks=(1, n_bodyparts, 3),
+                             dtype='float32')
+
+
+def save_data_online_h5(config,
+                        points_with_score_2d_batch: np.ndarray,
+                        bboxes_batch: np.ndarray,
+                        all_points_3d: np.ndarray):
+    """
+    Appends data for one frame to the HDF5 file.
+
+    Args:
+        config: The configuration object.
+        points_with_score_2d_batch: The 2D points with scores, shape (n_cameras, n_tracks, n_bodyparts, 3).
+        bboxes_batch: The bounding boxes, shape (n_cameras, n_tracks, 4).
+        all_points_3d: The 3D points, shape (n_tracks, n_frames=1, n_bodyparts, 3).
+    """
+    n_cams = config.calibration['n_cameras']
+    n_tracks = config.animal['n_tracks']
+    n_bodyparts = len(config.animal['bodyparts'])
+
+    assert points_with_score_2d_batch.shape == (n_cams, n_tracks, n_bodyparts, 3), 'Invalid shape for 2D points'
+    assert bboxes_batch.shape == (n_cams, n_tracks, 4), 'Invalid shape for bounding boxes'
+    assert all_points_3d.shape == (n_tracks, 1, n_bodyparts, 3), 'Invalid shape for 3D points'
+
+    points_2d_path = Path(config.sub_directory['points_2d']) / 'original.h5'
+    with h5py.File(points_2d_path, 'a') as f:
+        for cam_idx in range(n_cams):
+            camera_name = f'cam{cam_idx+1}'
+            points_dataset_name = f'{camera_name}_points'
+            bboxes_dataset_name = f'{camera_name}_bboxes'
+
+            points_dataset = f[points_dataset_name]
+            bboxes_dataset = f[bboxes_dataset_name]
+
+            points = points_with_score_2d_batch[cam_idx]  # shape (n_tracks, n_bodyparts, 3)
+            points = points[:, np.newaxis, :, :]  # shape (n_tracks, 1, n_bodyparts, 3)
+
+            bboxes = bboxes_batch[cam_idx]  # shape (n_tracks, 4)
+            bboxes = bboxes[:, np.newaxis, :]  # shape (n_tracks, 1, 4)
+
+            new_len = points_dataset.shape[1] + 1
+            points_dataset.resize((n_tracks, new_len, n_bodyparts, 3))
+            bboxes_dataset.resize((n_tracks, new_len, 4))
+
+            points_dataset[:, -1:, :, :] = points  # shape (n_tracks, 1, n_bodyparts, 3)
+            bboxes_dataset[:, -1:, :] = bboxes  # shape (n_tracks, 1, 4)
+
+    points_3d_path = Path(config.sub_directory['points_3d']) / 'original.h5'
+    with h5py.File(points_3d_path, 'a') as f:
+        for track_idx in range(n_tracks):
+            track_name = f'track_{track_idx+1}'
+            track_dataset = f[track_name]
+
+            points_3d = all_points_3d[track_idx]  # shape (n_frames=1, n_bodyparts, 3)
+
+            new_len = track_dataset.shape[0] + 1
+            track_dataset.resize((new_len, n_bodyparts, 3))
+
+            track_dataset[-1:] = points_3d  # shape (1, n_bodyparts, 3)
