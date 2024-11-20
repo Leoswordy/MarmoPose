@@ -11,6 +11,11 @@ logging.basicConfig(
 
 
 if __name__ == '__main__':
+    """
+    ********************* NOTE: Ensure that the camera clocks are manually synchronized with the server time before running this script. *********************
+    ********************* 登录每个摄像头的管理界面 - 时间设置 - 同步服务器时间 - 保存 *********************
+    """
+
     camera_paths = [
         'rtsp://admin:abc12345@192.168.1.228:554//Streaming/Channels/101', 
         'rtsp://admin:ABC12345@192.168.1.230:554//Streaming/Channels/101', 
