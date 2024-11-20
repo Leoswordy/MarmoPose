@@ -50,7 +50,7 @@ class PredictProcess(Process):
                                      output_dir = self.config.sub_directory['videos_raw'])
         self.mvc.start()
 
-        timer = Timer(name='Predict', output_path=f'{self.config.project_path}/log/predict_latency.npz').start()
+        timer = Timer(name='Predict').start()
         while not self.stop_event.is_set():
             images = self.mvc.get_next_frames()
 
@@ -177,7 +177,7 @@ class DisplayProcess(Process):
         self.video_writer = skvideo.io.FFmpegWriter(video_combined_path, inputdict={'-framerate': str(25)}, 
                                                     outputdict={'-vcodec': 'libx264', '-pix_fmt': 'yuv420p', '-preset': 'superfast', '-crf': '23'})
         
-        timer = Timer(name='Display', output_path=f'{self.config.project_path}/log/display_latency.npz').start()
+        timer = Timer(name='Display').start()
         while not self.stop_event.is_set():
             if not self.display_queue.empty():
                 data = self.display_queue.get(timeout=5)

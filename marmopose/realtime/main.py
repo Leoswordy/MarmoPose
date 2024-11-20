@@ -7,7 +7,6 @@ from marmopose.config import Config
 from marmopose.utils.constants import IP_DICT
 from marmopose.realtime.data_processor import PredictProcess
 from marmopose.realtime.controller import EventControl
-from marmopose.realtime.sound_controller import SoundControl
 
 logger = logging.getLogger(__name__)
 
@@ -41,26 +40,14 @@ def realtime_inference(config: Config,
                                      simulate_live=simulate_live)
     predict_process.start()
 
-    # event_control = EventControl(config=config, 
-    #                              data_queue=data_queue,
-    #                              stop_event=stop_event, 
-    #                              display_3d=display_3d, 
-    #                              display_2d=display_2d,
-    #                              display_scale=display_scale)
-    # event_control.run()
-
-    sound_control = SoundControl(config=config, 
+    event_control = EventControl(config=config, 
                                  data_queue=data_queue,
                                  stop_event=stop_event, 
                                  display_3d=display_3d, 
                                  display_2d=display_2d,
                                  display_scale=display_scale)
-    sound_control.assign_task(speaker_name='LG ULTRAFINE (NVIDIA High Definition Audio)', 
-                              wav_dir=r'D:\ccq\MarmoSync\SoundControl\whitenoise', 
-                              sound_positions=['left', 'right'])
-    sound_control.run()
+    event_control.run()
 
-    
     predict_process.join()
     logger.info('Main process finished')
 

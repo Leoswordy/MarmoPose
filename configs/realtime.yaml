@@ -1,12 +1,12 @@
 directory:
   project: '../demos/pair'
-  det_model: '../models/detection_model'
-  pose_model: '../models/pose_model'
+  det_model: '../models/detection_model_deployed'
+  pose_model: '../models/pose_model_deployed'
   dae_model: '../models/dae_model'
 
 
 animal:
-  n_tracks: 2
+  n_tracks: 1
   bodyparts: ['head', 'leftear', 'rightear', 'neck', 
               'leftelbow', 'rightelbow', 'lefthand', 'righthand', 
               'spinemid', 'tailbase', 'leftknee', 'rightknee', 
@@ -40,12 +40,12 @@ threshold:
 
 triangulation:
   user_define_axes: true
-  dae_enable: true
+  dae_enable: false
 
 
 optimization:
-  do_optimize: true
-  n_deriv_smooth: 2
+  do_optimize: false
+  n_deriv_smooth: 1
   scale_smooth: 2
   scale_length: 2
   scale_length_weak: 1
