@@ -38,7 +38,7 @@ pip install mmdeploy==1.3.1
 pip install mmdeploy-runtime-gpu==1.3.1
 ```
 
-**Step 4.** Install other dependencies.
+**Step 4.** Install other dependencies and marmopose.
 
 ```shell
 pip install -e .
