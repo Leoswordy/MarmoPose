@@ -3,7 +3,7 @@
 Welcome to **MarmoPose**, a comprehensive real-time multi-marmoset 3D pose tracking system.  
 
 <div align="center">
-  <img src="resources/marmopose.jpg" alt="MarmoPose Demo" width="600"/>
+  <img src="resources/demo.jpg" alt="MarmoPose Demo" width="600"/>
 </div>
 
 
