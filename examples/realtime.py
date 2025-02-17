@@ -30,7 +30,7 @@ if __name__ == '__main__':
     ]
 
     # If local_video_path is set, local videos will be used to simulate realtime streams for demo and debug purposes.
-    # Raw videos, 2D predictions, 3D poses and the 3D video will be saved in the project directory
+    # Raw videos, 2D predictions, 3D poses and the 3D video will be saved in the project directory.
     realtime_inference(config, 
                        camera_paths=camera_paths, 
                        display_3d=True, 

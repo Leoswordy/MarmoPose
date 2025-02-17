@@ -17,6 +17,7 @@ if __name__ == '__main__':
     """
 
     camera_paths = [
+        # Example addresses for RTSP cameras
         'rtsp://admin:abc12345@192.168.1.228:554//Streaming/Channels/101', 
         'rtsp://admin:ABC12345@192.168.1.230:554//Streaming/Channels/101', 
         'rtsp://admin:ABC12345@192.168.1.232:554//Streaming/Channels/101', 

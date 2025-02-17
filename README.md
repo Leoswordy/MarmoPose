@@ -1,15 +1,15 @@
 # MarmoPose
 
-Welcome to MarmoPose, a comprehensive real-time multi-marmoset 3D pose tracking system.  
+Welcome to **MarmoPose**, a comprehensive real-time multi-marmoset 3D pose tracking system.  
 
 <div align="center">
-  <img src="resources/marmopose.jpg" alt="MarmoPose Demo" width="600"/>
+  <img src="resources/demo.jpg" alt="MarmoPose Demo" width="600"/>
 </div>
 
 
-# Installation Guide
+## Installation Guide
 
-MarmoPose currently supports both Windows and Linux. Follow the steps below to set up your environment.
+MarmoPose has been tested on **Windows**. Follow the steps below to set up your environment.
 
 **Step 0.** Download and install Miniconda from the [official website](https://docs.conda.io/en/latest/miniconda.html).
 
@@ -38,22 +38,24 @@ pip install mmdeploy==1.3.1
 pip install mmdeploy-runtime-gpu==1.3.1
 ```
 
-**Step 4.** Install other dependencies and marmopose.
+**Step 4.** Clone this repository and install dependencies.
 
 ```shell
+git clone https://github.com/Leoswordy/MarmoPose.git
+cd MarmoPose
 pip install -e .
 ```
 
-**Step 5.** If you want to run TensorRT-deployed models (for realtime processing), follow these steps:
+**Step 5.** (Optional) If you want to run TensorRT-deployed models (for realtime processing), follow these steps:
 1. Install CUDA 11.8 by following the [CUDA installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html).
 2. Install TensorRT 8.6 following the **Zip File Installation** section in [TensorRT installation guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html).
 
 
-**Step 6.** To deploy new models, refer to the [MMDeploy](https://mmdeploy.readthedocs.io/en/latest/get_started.html).
+**Step 6.** (Optional) To deploy new models, refer to the [MMDeploy](https://mmdeploy.readthedocs.io/en/latest/get_started.html).
 
 
 ## Usage
-First download the pretrained models and demos from [MarmoPose](https://cloud.tsinghua.edu.cn/d/e8aa5ba88815437f8dbb/), and place them in the same directory as `README.md`. Alternatively, store them in another directory and specify it in the config file. For getting started, please refer to the Jupyter Notebooks in the 'examples' directory.
+First download the pretrained **models** and **demos** from [Tsinghua Cloud](https://cloud.tsinghua.edu.cn/d/7f190f04b2e541b1a408/), and place them in the same directory as `README.md`. Alternatively, store them in another directory and specify it in the config file. For getting started, please refer to the Jupyter Notebooks in the `examples` directory.
 
 ### Models
 Currently, we provide 6 pretrained models tailored for different scenarios. The training data is **Marmoset3K**, containing 1527 images with one marmoset and 1646 images with two marmosets (where one is dyed blue).
@@ -76,7 +78,7 @@ Currently, we provide 6 pretrained models tailored for different scenarios. The 
   - **Purpose**: Fill in missing values in 3D poses.
   - **Use case**: Any scenario where necessary.
 
-#### `detection_model_family`
+#### `detection_model_family_finetune`
   - **Finetuned on**: 100 images (only bboxes annotated) containing a family of 4 differently colored marmosets
   - **Purpose**: Predicts bounding boxes and identities for up to 4 marmosets.
   - **Identities**: 
@@ -120,8 +122,13 @@ For scenarios involving 4(or 3, or 2) marmosets where only a subset needs to be 
 
 > **Note**: This demo is in a complex scenario (family marmosets with young, and more obstacles in the home cage). The training data from **Marmoset3K** does **NOT** cover these scenarios. Although preliminary results can be obtained with the `detection_model_family` and `pose_model`, the performance may not be satisfactory (You may see that current version of **MarmoPose** is not effective in this demo, that's because the landmarks of the `green_head_marmoset` are invisible at most of the time and views, making it difficult to detect and assign label. Additionally, new poses not covered in the training data are currently not recognized well.). More pose data is necessary to finetune the models.
 
-#### `Realtime Processing`
+### Datasets
+
+The **Marmoset3K** dataset is  available at [Zenodo](https://doi.org/10.5281/zenodo.14672425).
+
+## Realtime Processing
 For scenarios requiring real-time processing, refer to `examples/realtime.py` and `demos/realtime`.
+
 
 ## Fine-tune models
 
@@ -166,11 +173,13 @@ python tools/train.py tools/train_config/pose_config.py --resume models/pose_mod
 > **Note**: Remove `--resume` if you want to start training from scratch.
 
 
-## Other Preprocessing Tools
+## Useful Tools
 
-When preparing videos recorded by current monitoring cameras in THBI, use `tools/video_converter.py` to convert and align the videos.
+MarmoPose provides several utility scripts in the `tools` directory for processing videos and RTSP camera streams.
 
+#### `video_converter.py`
+Converts and aligns video files for further processing.
 
-### Acknowledgments
-Some calibration logic is adapted from [Anipose](https://github.com/liliekarashchuk/anipose), 
-licensed under BSD 2-Clause. We thank the authors for their open-source work.
+#### `realtime_synchronized_record.py`
+Records synchronized video streams from multiple cameras and saves them locally.
+
