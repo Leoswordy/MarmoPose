@@ -3,7 +3,7 @@
 ========================================================================
 
 MarmoPose
-Copyright (C)  2023-2025  Chaoqun Cheng
+Copyright (C) 2023-2025, Chaoqun Cheng
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -703,10 +703,6 @@ Public License instead of this License.  But first, please read
   THIRD-PARTY LICENSE NOTICES
 ========================================================================
 
-This project incorporates or modifies code from external sources. Their
-original licenses are retained below.
-
-----------------------------------------------------------------------
 1) Portions of the code are adapted from the Anipose project, which
    is licensed under the following terms (BSD 2-Clause):
 
