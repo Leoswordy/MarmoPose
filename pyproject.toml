@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "marmopose"
+version = "1.2.1"
+description = "A realtime multi-marmoset 3D pose tracking system."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+
+dependencies = [
+  "Pillow",
+  "h5py",
+  "seaborn",
+  "scikit-video",
+  "av",
+  "open3d"
+]
+
+[tool.setuptools]
+packages = ["marmopose"]

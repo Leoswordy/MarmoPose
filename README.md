@@ -1,6 +1,6 @@
 # MarmoPose
 
-Welcome to MarmoPose, a comprehensive multi-marmoset real-time 3D pose tracking system.  
+Welcome to MarmoPose, a comprehensive real-time multi-marmoset 3D pose tracking system.  
 
 <div align="center">
   <img src="resources/marmopose.jpg" alt="MarmoPose Demo" width="600"/>
@@ -38,10 +38,10 @@ pip install mmdeploy==1.3.1
 pip install mmdeploy-runtime-gpu==1.3.1
 ```
 
-**Step 4.** Install other dependencies.
+**Step 4.** Install other dependencies and marmopose.
 
 ```shell
-python -m pip install Pillow h5py seaborn scikit-video av open3d
+pip install -e .
 ```
 
 **Step 5.** If you want to run TensorRT-deployed models (for realtime processing), follow these steps:
@@ -170,3 +170,7 @@ python tools/train.py tools/train_config/pose_config.py --resume models/pose_mod
 
 When preparing videos recorded by current monitoring cameras in THBI, use `tools/video_converter.py` to convert and align the videos.
 
+
+### Acknowledgments
+Some calibration logic is adapted from [Anipose](https://github.com/liliekarashchuk/anipose), 
+licensed under BSD 2-Clause. We thank the authors for their open-source work.

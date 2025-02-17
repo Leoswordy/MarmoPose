@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,9 @@ class Config:
             'board_type': 'checkerboard',
             'board_square_side_length': 45,
             'fisheye': True
+        },
+        'animal': {
+            'label_mapping': None
         },
         'visualization': {
             'track_cmap': 'Set2',
@@ -62,7 +66,7 @@ class Config:
             config = yaml.safe_load(file) or {}
         
         self.set_defaults(config, self.DEFAULT_CONFIG)
-        return config
+        return copy.deepcopy(config)
 
     @staticmethod
     def set_defaults(target: dict, defaults: dict) -> None:

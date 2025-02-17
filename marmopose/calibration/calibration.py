@@ -1,3 +1,7 @@
+# Portions of this file are derived from the Anipose project
+# (BSD 2-Clause License, Copyright (c) 2019-2023, Lili Karashchuk).
+# The code has been modified to suit local requirements.
+
 import pickle
 import logging
 from collections import defaultdict

@@ -53,6 +53,7 @@ class Predictor:
         """ Initialize necessary data for tracking and keypoints detection. """
         self.n_tracks = config.animal['n_tracks']
         self.n_bodyparts = len(config.animal['bodyparts'])
+        self.label_mapping = config.animal['label_mapping']
         self.skip_index = [config.animal['bodyparts'].index(bp) for bp in config.animal['skip']]
 
         self.bbox_threshold = config.threshold['bbox']
@@ -265,11 +266,25 @@ class Predictor:
             bboxes_all = np.concatenate((pred_instances.bboxes, pred_instances.scores[:, None], pred_instances.labels[:, None]), axis=1) # (x1, y1, x2, y2, score, label)
 
             bboxes_filtered = bboxes_all[pred_instances.scores > self.bbox_threshold]
+
+            if self.label_mapping:
+                bboxes_filtered = self.bboxes_label_mapping(bboxes_filtered, self.label_mapping) # Only keep the bboxes with the desired labels
+
             bboxes = self.heuristic_assign_bboxes(bboxes_filtered, self.iou_threshold)
             
             bboxes_list.append(bboxes)
         return bboxes_list
+    
+    @staticmethod
+    def bboxes_label_mapping(bboxes: np.ndarray, label_mapping: dict) -> np.ndarray:
+        mapped_bboxes = []
+        for bbox in bboxes:
+            if bbox[5] in label_mapping:
+                bbox[5] = label_mapping[bbox[5]]
+                mapped_bboxes.append(bbox)
         
+        return np.array(mapped_bboxes) if mapped_bboxes else np.empty((0, 6))
+    
     @staticmethod
     def heuristic_assign_bboxes(bboxes: np.ndarray, iou_threshold: float = 0.8) -> np.ndarray:
         """

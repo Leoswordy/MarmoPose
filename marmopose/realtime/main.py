@@ -50,4 +50,3 @@ def realtime_inference(config: Config,
 
     predict_process.join()
     logger.info('Main process finished')
-
