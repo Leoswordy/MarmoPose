@@ -170,3 +170,7 @@ python tools/train.py tools/train_config/pose_config.py --resume models/pose_mod
 
 When preparing videos recorded by current monitoring cameras in THBI, use `tools/video_converter.py` to convert and align the videos.
 
+
+### Acknowledgments
+Some calibration logic is adapted from [Anipose](https://github.com/liliekarashchuk/anipose), 
+licensed under BSD 2-Clause. We thank the authors for their open-source work.
