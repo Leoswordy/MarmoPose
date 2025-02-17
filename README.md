@@ -41,7 +41,7 @@ pip install mmdeploy-runtime-gpu==1.3.1
 **Step 4.** Install other dependencies.
 
 ```shell
-python -m pip install Pillow h5py seaborn scikit-video av open3d
+pip install -e .
 ```
 
 **Step 5.** If you want to run TensorRT-deployed models (for realtime processing), follow these steps:
