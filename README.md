@@ -1,6 +1,6 @@
 # MarmoPose
 
-Welcome to MarmoPose, a comprehensive multi-marmoset real-time 3D pose tracking system.  
+Welcome to MarmoPose, a comprehensive real-time multi-marmoset 3D pose tracking system.  
 
 <div align="center">
   <img src="resources/marmopose.jpg" alt="MarmoPose Demo" width="600"/>
