@@ -1,6 +1,6 @@
 # Portions of this file are derived from the Anipose project
-# (BSD 2-Clause License, Copyright (c) 2019-2023, Lili Karashchuk).
-# The code has been modified to suit local requirements.
+# (BSD 2-Clause License, Copyright (c) 2019-2023, Lili Karashchuk)
+# The code has been modified to suit local requirements
 
 from abc import ABC, abstractmethod
 from collections import defaultdict
