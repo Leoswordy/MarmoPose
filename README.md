@@ -183,3 +183,17 @@ Converts and aligns video files for further processing.
 #### `realtime_synchronized_record.py`
 Records synchronized video streams from multiple cameras and saves them locally.
 
+
+## Citation
+
+If you find this project useful in your research, please consider citing:
+
+```bibtex
+@article{MarmoPose,
+  title={A real-time, multi-subject three-dimensional pose tracking system for the behavioral analysis of non-human primates},
+  author={Cheng, Chaoqun and Huang, Zijian and Zhang, Ruiming and Huang, Guozheng and Wang, Han and Tang, Likai and Wang, Xiaoqin},
+  journal={Cell Reports Methods},
+  year={2025}
+}
+```
+
